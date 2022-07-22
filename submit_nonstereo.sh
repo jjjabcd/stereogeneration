@@ -13,7 +13,7 @@ module load openbabel
 
 source  ~/env/stereogeneration/bin/activate
 
-time python main.py 0
+time python main.py --target=4LDE --num_workers=12
 
 deactivate
 
