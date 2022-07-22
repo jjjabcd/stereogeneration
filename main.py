@@ -19,20 +19,19 @@ from morfeus.conformer import ConformerEnsemble
 
 import multiprocessing
 import subprocess
-import re
+from argparse import ArgumentParser
 
-WORK_DIR = 'cache'
-
-def fitness_function(smi):
+def fitness_function(smi: str, target: str = '4LDE'):
     cwd = os.getcwd()
     tmp_dir = tempfile.TemporaryDirectory(dir='/tmp')
     os.chdir(tmp_dir.name)
 
-    path = os.path.join(cwd, 'docking')
+    smina_path = os.path.join(cwd, 'docking')
+    target_path = os.path.join(smina_path, target)
 
     # check the cache
-    if os.path.isfile(os.path.join(path, 'cache.csv')):
-        with open(os.path.join(path, 'cache.csv'), 'r') as f:
+    if os.path.isfile(os.path.join(target_path, 'cache.csv')):
+        with open(os.path.join(target_path, 'cache.csv'), 'r') as f:
             reader = csv.reader(f)
             cache = {rows[0]: float(rows[1]) for rows in reader}
     else:
@@ -59,8 +58,8 @@ def fitness_function(smi):
 
         try:
             # run docking procedure
-            output = subprocess.run(f"{path}/smina.static -r {path}/receptor.pdb -l {name}.pdb --autobox_ligand \
-                {path}/ligand.pdb --autobox_add 5 --exhaustiveness 16 --seed 42",
+            output = subprocess.run(f"{smina_path}/smina.static -r {target_path}/receptor.pdb -l {name}.pdb --autobox_ligand \
+                {target_path}/ligand.pdb --autobox_add 5 --exhaustiveness 16 --seed 42",
                 shell=True, capture_output=True)
 
             if output.returncode != 0:
@@ -81,7 +80,7 @@ def fitness_function(smi):
             score = -1000.0
         
         # write to file
-        with open(os.path.join(path, 'cache.csv'), 'a') as f:
+        with open(os.path.join(target_path, 'cache.csv'), 'a') as f:
             f.write(f'{smi},{score},{time.time() - t0}\n')
 
     with open(os.path.join(cwd, 'OUT_ALL.csv'), 'a') as f:
@@ -95,12 +94,21 @@ def fitness_function(smi):
 
 
 if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument("--target", action="store", type=str, default="4LDE", help="Protein target, defaults 4LDE.")
+    parser.add_argument("--num_workers", action="store", type=int, default=1, help="Number of workers, defaults 1.")
+    parser.add_argument("--stereo", action="store_true", dest="stereo", help="Toggle stereogeneration, defaults false.", default=False)
 
-    STEREO = bool(int(sys.argv[-1]))
-    print(f'Stereoisomers? : {STEREO}')
+    FLAGS = parser.parse_args()
+    assert FLAGS.target in ['4LDE', '1OYT', '1SYH'], 'Invalid protein target'
+
+    import pdb; pdb.set_trace()
+
+    stereo = FLAGS.stereo
+    print(f'Stereoisomers? : {stereo}')
 
     # load isoalphabet from zinc dataset
-    fname = 'data/isoalphabet.npz' if STEREO else 'data/alphabet.npz'
+    fname = 'data/isoalphabet.npz' if stereo else 'data/alphabet.npz'
     alphabet = np.load(fname, allow_pickle=True)['alphabet'].tolist()
     print(f'Alphabet contains: {len(alphabet)}')
     
@@ -128,7 +136,7 @@ if __name__ == '__main__':
         # An option to use a classifier as selection bias
         "use_classifier": True,
 
-        "num_workers": 12,
+        "num_workers": FLAGS.num_workers,
 
         # alphabet
         "alphabet": alphabet,
@@ -146,7 +154,7 @@ if __name__ == '__main__':
         "explr_num_mutations": 10,
         "crossover_num_random_samples": 5,
 
-        'stereo': STEREO,
+        'stereo': stereo,
 
     }
 
@@ -158,14 +166,14 @@ if __name__ == '__main__':
     selfies.set_semantic_constraints(new_constraints)  # update constraints
 
     # get initial fitnesses from csv
-    df = pd.read_csv('data/starting_smiles.csv')
+    df = pd.read_csv(f'data/{FLAGS.target}/starting_smiles.csv')
     init_fitness = df['fitness'].tolist()
     
-    fname = 'data/starting_smiles.txt' if STEREO else 'data/starting_smiles_noniso.txt'
-    output_dir = 'RESULTS_stereo' if STEREO else 'RESULTS_nonstereo'
+    fname = 'data/starting_smiles.txt' if stereo else 'data/starting_smiles_noniso.txt'
+    output_dir = 'RESULTS_stereo' if stereo else 'RESULTS_nonstereo'
     agent = JANUS(
         work_dir=output_dir,
-        fitness_function = fitness_function,            # calculate before hand and save in zinc file
+        fitness_function = lambda x: fitness_function(x, target=FLAGS.target),
         start_population = fname,
         starting_fitness = init_fitness,
         **params_dict
