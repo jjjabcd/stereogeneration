@@ -18,6 +18,7 @@ from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers
 from morfeus.conformer import ConformerEnsemble
 
 import multiprocessing
+from functools import partial
 import subprocess
 from argparse import ArgumentParser
 
@@ -98,11 +99,10 @@ if __name__ == '__main__':
     parser.add_argument("--target", action="store", type=str, default="4LDE", help="Protein target, defaults 4LDE.")
     parser.add_argument("--num_workers", action="store", type=int, default=1, help="Number of workers, defaults 1.")
     parser.add_argument("--stereo", action="store_true", dest="stereo", help="Toggle stereogeneration, defaults false.", default=False)
+    parser.add_argument("--classifier", action="store_true", dest="use_classifier", help="Toggle classifier, defaults false", default=False)
 
     FLAGS = parser.parse_args()
     assert FLAGS.target in ['4LDE', '1OYT', '1SYH'], 'Invalid protein target'
-
-    import pdb; pdb.set_trace()
 
     stereo = FLAGS.stereo
     print(f'Stereoisomers? : {stereo}')
@@ -134,7 +134,7 @@ if __name__ == '__main__':
         "use_fragments": True,
 
         # An option to use a classifier as selection bias
-        "use_classifier": True,
+        "use_classifier": FLAGS.use_classifier,
 
         "num_workers": FLAGS.num_workers,
 
@@ -169,11 +169,15 @@ if __name__ == '__main__':
     df = pd.read_csv(f'data/{FLAGS.target}/starting_smiles.csv')
     init_fitness = df['fitness'].tolist()
     
-    fname = 'data/starting_smiles.txt' if stereo else 'data/starting_smiles_noniso.txt'
+    # function with specified target
+    tar_func = partial(fitness_function, target=FLAGS.target)
+    tar_func.__name__ = f'{FLAGS.target}_score'
+
+    fname = f'data/starting_smiles.txt' if stereo else f'data/starting_smiles_noniso.txt'
     output_dir = 'RESULTS_stereo' if stereo else 'RESULTS_nonstereo'
     agent = JANUS(
         work_dir=output_dir,
-        fitness_function = lambda x: fitness_function(x, target=FLAGS.target),
+        fitness_function = tar_func,
         start_population = fname,
         starting_fitness = init_fitness,
         **params_dict

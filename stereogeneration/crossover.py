@@ -163,13 +163,10 @@ def perform_crossover(comb_smi, num_random_samples, stereo=True):
     collect_smiles_canon : (list of SMILES)
         List of all potential unique median molecules enoucntered during path formation.
     """
-    try:
-        smi_a, smi_b = comb_smi.split("xxx")
-        mol_a, mol_b = Chem.MolFromSmiles(smi_a), Chem.MolFromSmiles(smi_b)
-        Chem.Kekulize(mol_a)
-        Chem.Kekulize(mol_b)
-    except:
-        return [] 
+    smi_a, smi_b = comb_smi.split("xxx")
+    mol_a, mol_b = Chem.MolFromSmiles(smi_a), Chem.MolFromSmiles(smi_b)
+    Chem.Kekulize(mol_a)
+    Chem.Kekulize(mol_b)
 
     randomized_smile_orderings_a = []
     for _ in range(num_random_samples):
@@ -215,8 +212,8 @@ def perform_crossover(comb_smi, num_random_samples, stereo=True):
             continue
 
     collect_smiles_canon = list(set(collect_smiles_canon))
-
     return collect_smiles_canon
+
 
 
 def crossover_smiles(smiles_join, crossover_num_random_samples, stereo=True):
@@ -235,22 +232,26 @@ def crossover_smiles(smiles_join, crossover_num_random_samples, stereo=True):
         List of crossover molecules that are ordered (highest to lowest)
         by joint similarity scores.
     """
-    map_ = {}
+    try:
+        map_ = {}
+        map_[smiles_join] = perform_crossover(
+            smiles_join, num_random_samples=crossover_num_random_samples, stereo=stereo
+        )
 
-    map_[smiles_join] = perform_crossover(
-        smiles_join, num_random_samples=crossover_num_random_samples, stereo=stereo
-    )
+        # map_ordered = {}
+        for key_ in map_:
+            med_all = map_[key_]
+            smi_1, smi_2 = key_.split("xxx")
+            joint_sim = get_joint_sim(med_all, smi_1, smi_2)
 
-    # map_ordered = {}
-    for key_ in map_:
-        med_all = map_[key_]
-        smi_1, smi_2 = key_.split("xxx")
-        joint_sim = get_joint_sim(med_all, smi_1, smi_2)
+            joint_sim_ord = np.argsort(joint_sim)
+            joint_sim_ord = joint_sim_ord[::-1]
 
-        joint_sim_ord = np.argsort(joint_sim)
-        joint_sim_ord = joint_sim_ord[::-1]
+            med_all_ord = [med_all[i] for i in joint_sim_ord]
 
-        med_all_ord = [med_all[i] for i in joint_sim_ord]
-
-    return med_all_ord
+        return med_all_ord
+        
+    except:
+        print('Failed crossover')
+        return []
     

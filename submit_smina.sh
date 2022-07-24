@@ -1,9 +1,8 @@
 #!/bin/bash
 #SBATCH --account=rrg-aspuru
-#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=64
 #SBATCH --mem=125000M               # memory (per node)
-#SBATCH --time=0-15:00
+#SBATCH --time=0-07:00
 #SBATCH --job-name smina
 
 module load python/3.8 scipy-stack
