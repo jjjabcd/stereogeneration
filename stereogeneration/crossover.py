@@ -232,26 +232,28 @@ def crossover_smiles(smiles_join, crossover_num_random_samples, stereo=True):
         List of crossover molecules that are ordered (highest to lowest)
         by joint similarity scores.
     """
-    try:
-        map_ = {}
-        map_[smiles_join] = perform_crossover(
-            smiles_join, num_random_samples=crossover_num_random_samples, stereo=stereo
-        )
+    med_all_ord = []
+    while len(med_all_ord) == 0:
+        # to deal with errors in crossover due to invalid stereoselfies
+        try:
+            map_ = {}
+            map_[smiles_join] = perform_crossover(
+                smiles_join, num_random_samples=crossover_num_random_samples, stereo=stereo
+            )
 
-        # map_ordered = {}
-        for key_ in map_:
-            med_all = map_[key_]
-            smi_1, smi_2 = key_.split("xxx")
-            joint_sim = get_joint_sim(med_all, smi_1, smi_2)
+            # map_ordered = {}
+            for key_ in map_:
+                med_all = map_[key_]
+                smi_1, smi_2 = key_.split("xxx")
+                joint_sim = get_joint_sim(med_all, smi_1, smi_2)
 
-            joint_sim_ord = np.argsort(joint_sim)
-            joint_sim_ord = joint_sim_ord[::-1]
+                joint_sim_ord = np.argsort(joint_sim)
+                joint_sim_ord = joint_sim_ord[::-1]
 
-            med_all_ord = [med_all[i] for i in joint_sim_ord]
-
-        return med_all_ord
+                med_all_ord = [med_all[i] for i in joint_sim_ord]
+        except:
+            med_all_ord = []
+    
+    return med_all_ord
         
-    except:
-        print('Failed crossover')
-        return []
     
