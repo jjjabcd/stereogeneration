@@ -11,7 +11,7 @@ import numpy as np
 from .crossover import crossover_smiles
 from .mutate import mutate_smiles
 from .network import create_and_train_network, obtain_model_pred
-from .utils import sanitize_smiles, get_fp_scores, assign_stereo
+from .utils import sanitize_smiles, get_fp_scores, assign_stereo, neutralize_radicals
 from .fragment import form_fragments
 
 
@@ -191,6 +191,14 @@ class JANUS:
             smi_list = [smi for smi in smi_list if self.custom_filter(smi)]
         return smi_list
 
+    def neutralize_radicals(self, smi_list: List[str]):
+        new_smi_list = []
+        for smi in smi_list:
+            new_smi = neutralize_radicals(smi)
+            if new_smi is not None:
+                new_smi_list.append(new_smi)
+        return new_smi_list
+
     def save_hyperparameters(self):
         hparams = {
             k: v if not callable(v) else v.__name__ for k, v in vars(self).items()
@@ -226,6 +234,7 @@ class JANUS:
                 mut_smi_explr = self.mutate_smi_list(
                     replace_smiles[0 : len(replace_smiles) // 2], space="explore"
                 )
+                mut_smi_explr = self.neutralize_radicals(mut_smi_explr)
                 mut_smi_explr = self.check_filters(mut_smi_explr)
 
                 # Crossovers:
@@ -233,6 +242,7 @@ class JANUS:
                 for item in replace_smiles[len(replace_smiles) // 2 :]:
                     smiles_join.append(item + "xxx" + random.choice(keep_smiles))
                 cross_smi_explr = self.crossover_smi_list(smiles_join)
+                cross_smi_explr = self.neutralize_radicals(cross_smi_explr)
                 cross_smi_explr = self.check_filters(cross_smi_explr)
 
                 # Combine and get unique smiles not yet found
@@ -345,6 +355,7 @@ class JANUS:
             while len(exploit_smiles) < self.generation_size:
                 smiles_local_search = population_sort[0 : self.top_mols].tolist()
                 mut_smi_loc = self.mutate_smi_list(smiles_local_search, "local")
+                mut_smi_loc = self.neutralize_radicals(mut_smi_loc)
                 mut_smi_loc = self.check_filters(mut_smi_loc)
 
                 # filter out molecules already found

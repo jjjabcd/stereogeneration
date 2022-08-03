@@ -2,6 +2,7 @@ import selfies as sf
 import yaml
 import random 
 import rdkit.Chem as Chem
+from rdkit.Chem import Descriptors
 from rdkit.Chem import AllChem
 from rdkit.Chem import MolFromSmiles as smi2mol
 from rdkit.Chem import MolToSmiles as mol2smi
@@ -69,6 +70,23 @@ def assign_stereo(smi, collector):
     else:
         # if none are found, return original smiles
         return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True), False
+
+def neutralize_radicals(smi):
+    mol = smi2mol(smi)
+    if mol is None:
+        return None
+    if Descriptors.NumRadicalElectrons(mol) == 0:
+        return smi
+    else:
+        for a in mol.GetAtoms():
+            num_rad = a.GetNumRadicalElectrons()
+            if num_rad > 0:
+                a.SetNumRadicalElectrons(0)
+                a.SetNumExplicitHs(num_rad)
+        smi = mol2smi(mol)
+        return smi
+
+
 
 def get_fp_scores(smiles_back, target_smi):
     """

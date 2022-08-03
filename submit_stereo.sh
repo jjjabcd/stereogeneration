@@ -2,7 +2,7 @@
 #SBATCH --account=rrg-aspuru
 #SBATCH --ntasks-per-node=64
 #SBATCH --mem=125000M               # memory (per node)
-#SBATCH --time=0-12:00
+#SBATCH --time=0-14:00
 #SBATCH --job-name stereo
 
 module load python/3.8 scipy-stack
@@ -12,7 +12,8 @@ module load openbabel
 
 source  ~/env/stereogeneration/bin/activate
 
-time python main.py --target=4LDE --num_workers=64 --stereo
+echo Working on $1
+time python main.py --target=$1 --num_workers=$SLURM_NTASKS --stereo
 
 deactivate
 

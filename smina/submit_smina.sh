@@ -2,7 +2,7 @@
 #SBATCH --account=rrg-aspuru
 #SBATCH --ntasks-per-node=64
 #SBATCH --mem=125000M               # memory (per node)
-#SBATCH --time=0-07:00
+#SBATCH --time=0-05:00
 #SBATCH --job-name smina
 
 module load python/3.8 scipy-stack
@@ -12,7 +12,7 @@ module load openbabel
 
 source  ~/env/stereogeneration/bin/activate
 
-time python run_smina.py --file=data/starting_smiles.txt --num_workers=64 --target=4LDE
+time python run_smina.py --file=data/starting_smiles.txt --num_workers=$SLURM_NTASKS --target=1OYT
 
 deactivate
 

@@ -10,10 +10,12 @@ from rdkit import Chem
 import rdkit.Chem as rdc
 import rdkit.Chem.rdMolDescriptors as rdcmd
 import rdkit.Chem.Lipinski as rdcl
+from rdkit.Chem import Descriptors
 # import argparse as ap
 import pathlib as pl
 
 cwd = pl.Path.cwd() # define current working directory
+
 def smiles_to_mol(smiles):
     """
     Convert SMILES to mol object using RDKit
@@ -105,7 +107,17 @@ def passes_filter(smi):
     if mol is None:
         return False
     mol_hydrogen = Chem.AddHs(mol)
-    if rdcmd.CalcNumBridgeheadAtoms(mol) == 0 and rdcmd.CalcNumSpiroAtoms(mol) == 0 and aromaticity_degree(mol) >= 0.5 and conjugation_degree(mol) >= 0.7 and (5 <= maximum_ring_size(mol) <=7) and (5 <= minimum_ring_size(mol) <=7) and substructure_violations(mol)==False and mol_hydrogen.GetNumAtoms()<=70: 
+    if (
+        rdcmd.CalcNumBridgeheadAtoms(mol) == 0 and 
+        rdcmd.CalcNumSpiroAtoms(mol) == 0 and 
+        aromaticity_degree(mol) >= 0.5 and 
+        conjugation_degree(mol) >= 0.7 and 
+        (5 <= maximum_ring_size(mol) <=7) and 
+        (5 <= minimum_ring_size(mol) <=7) and 
+        substructure_violations(mol)==False and 
+        mol_hydrogen.GetNumAtoms()<=70 and
+        Descriptors.NumRadicalElectrons(mol) == 0
+    ): 
         return True
     else: 
         return False 
