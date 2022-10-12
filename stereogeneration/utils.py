@@ -1,6 +1,7 @@
 import selfies as sf
 import yaml
 import random 
+import numpy as np
 import rdkit.Chem as Chem
 from rdkit.Chem import Descriptors
 from rdkit.Chem import AllChem
@@ -54,10 +55,27 @@ def sanitize_smiles(smi):
     except:
         return None
 
-def assign_stereo(smi, collector):
+
+def assign_stereo(smi, collector=[]):
     # pick an assigned stereosmiles (if more than one)
     mol = Chem.MolFromSmiles(smi)
-    isomers = list(EnumerateStereoisomers(mol))
+    opt = StereoEnumerationOptions(unique=True, onlyUnassigned=True)
+    isomers = list(EnumerateStereoisomers(mol, options=opt))
+
+    # remove nitrogen chiral centres which are enumerated by rdkit
+    new_isomers = []
+    for mol in isomers:
+        atoms = mol.GetAtoms()
+        chirality = Chem.FindMolChiralCenters(mol)
+        for chir in chirality:
+            if mol.GetAtomWithIdx(chir[0]).GetAtomicNum() == 7:
+                mol.GetAtomWithIdx(chir[0]).SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
+        new_isomers.append(mol)
+    
+    # remove any duplicates
+    new_smiles = [Chem.MolToSmiles(m, canonical=True) for m in new_isomers]
+    _, idx = np.unique(new_smiles, return_index=True)
+    isomers = np.array(new_isomers)[idx].tolist()
 
     # return isomer that is not yet observed
     if len(isomers) > 1:
@@ -65,11 +83,11 @@ def assign_stereo(smi, collector):
         for i in range(len(isomers)):
             smi = Chem.MolToSmiles(isomers[i], isomericSmiles=True, canonical=True)
             if smi not in collector:
-                return smi, True
-        return smi, False      # if all are observed, return anyway
+                return smi #, True
+        return smi #, False      # if all are observed, return anyway
     else:
         # if none are found, return original smiles
-        return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True), False
+        return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True) #, False
 
 def neutralize_radicals(smi):
     mol = smi2mol(smi)

@@ -13,8 +13,10 @@ pip install --upgrade pip
 # pip install openbabel
 
 pip install torch
+pip install scikit-learn
 pip install morfeus-ml
 pip install selfies==1.0.3
+pip install pytorch-lightning
 pip install pyyaml
 pip install seaborn
 

@@ -3,7 +3,7 @@ import csv
 import time
 import tempfile, inspect
 
-from stereogeneration import JANUS
+from stereogeneration import JANUS, docking
 from stereogeneration.utils import sanitize_smiles
 from stereogeneration.filter import passes_filter
 
@@ -11,99 +11,33 @@ import selfies as sf
 import selfies
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.covariance import EllipticEnvelope
 
 import rdkit.Chem as Chem
 from rdkit.Chem import Draw
-from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers
-from morfeus.conformer import ConformerEnsemble
+# from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers
+# from morfeus.conformer import ConformerEnsemble
 
 import multiprocessing
 from functools import partial
 import subprocess
 from argparse import ArgumentParser
 
-def fitness_function(smi: str, target: str = '4LDE'):
-    cwd = os.getcwd()
-    tmp_dir = tempfile.TemporaryDirectory(dir='/tmp')
-    os.chdir(tmp_dir.name)
-
-    smina_path = os.path.join(cwd, 'docking')
-    target_path = os.path.join(smina_path, target)
-
-    # check the cache
-    if os.path.isfile(os.path.join(target_path, 'cache.csv')):
-        with open(os.path.join(target_path, 'cache.csv'), 'r') as f:
-            reader = csv.reader(f)
-            cache = {rows[0]: float(rows[1]) for rows in reader}
-    else:
-        cache = []
-
-    # name = re.sub(r'[^\w]', '', smi)
-    name = 'mol'
-    if smi in cache:
-        score = cache[smi]
-    else:
-        t0 = time.time()
-
-        # do conformer search using morfeus
-        try:
-            ensemble_p = ConformerEnsemble.from_rdkit(smi, optimize="MMFF94", random_seed=25)
-            ensemble_p.prune_rmsd()
-            ensemble_p.sort()   
-            ensemble_p[0:1].write_xyz(f'{name}.xyz')
-            _ = subprocess.run(f'obabel -ixyz {str(name)}.xyz -O {name}.pdb --best', shell=True, capture_output=True)
-        except:
-            # generate ligand files directly from smiles using openbabel
-            print('Default to openbabel embedding...')
-            _ = subprocess.run(f'obabel -:"{smi}" --gen3d -h -O {name}.pdb --best', shell=True, capture_output=True)
-
-        try:
-            # run docking procedure
-            output = subprocess.run(f"{smina_path}/smina.static -r {target_path}/receptor.pdb -l {name}.pdb --autobox_ligand \
-                {target_path}/ligand.pdb --autobox_add 5 --exhaustiveness 16 --seed 42",
-                shell=True, capture_output=True)
-
-            if output.returncode != 0:
-                # print('Job failed.')
-                score = -999.0
-            else:
-                # extract result from output
-                found = False
-                for s in output.stdout.decode('utf-8').split():
-                    if found:
-                        # print(f'{s} kcal/mol')
-                        break
-                    if s == '1':
-                        found = True
-
-                score = -float(s)
-        except:
-            score = -1000.0
-        
-        # write to file
-        with open(os.path.join(target_path, 'cache.csv'), 'a') as f:
-            f.write(f'{smi},{score},{time.time() - t0}\n')
-
-    with open(os.path.join(cwd, 'OUT_ALL.csv'), 'a') as f:
-        f.write(f'{smi},{score}\n')
-
-    os.chdir(cwd)
-    tmp_dir.cleanup()
-        
-    return score
-
-
 
 if __name__ == '__main__':
     parser = ArgumentParser()
-    parser.add_argument("--target", action="store", type=str, default="4LDE", help="Protein target, defaults 4LDE.")
+    parser.add_argument("--target", action="store", type=str, default="1OYT", help="Protein target, defaults 1OYT.")
     parser.add_argument("--num_workers", action="store", type=int, default=1, help="Number of workers, defaults 1.")
     parser.add_argument("--stereo", action="store_true", dest="stereo", help="Toggle stereogeneration, defaults false.", default=False)
     parser.add_argument("--classifier", action="store_true", dest="use_classifier", help="Toggle classifier, defaults false", default=False)
+    parser.add_argument("--starting_pop", action="store", type=str, default="worst", help="Method to select starting population: random, worst, best.")
+    parser.add_argument("--starting_size", action="store", type=int, default=5000, help="Number of starting smiles, must be larger than pop size")
 
     FLAGS = parser.parse_args()
-    assert FLAGS.target in ['4LDE', '1OYT', '1SYH'], 'Invalid protein target'
-
+    assert FLAGS.target in ['1OYT', '1SYH'], 'Invalid protein target'
+    
+    fitness_function = docking.fitness_function
     stereo = FLAGS.stereo
     print(f'Stereoisomers? : {stereo}')
 
@@ -167,13 +101,36 @@ if __name__ == '__main__':
 
     # get initial fitnesses from csv
     df = pd.read_csv(f'data/{FLAGS.target}/starting_smiles.csv')
-    init_fitness = df['fitness'].tolist()
-    
+
+    # remove failed jobs and outliers
+    df = df[df['fitness'] > -900.0] 
+    keep = EllipticEnvelope().fit_predict(df[['fitness']].to_numpy())
+    df = df[keep==1]
+
+    # get the starting smiles and write to file
+    if FLAGS.starting_pop == 'worst':
+        start_df = df.sort_values(by = 'fitness', ascending = True)[:FLAGS.starting_size]
+    elif FLAGS.starting_pop == 'best':
+        start_df = df.sort_values(by = 'fitness', ascending = False)[:FLAGS.starting_size]
+    elif FLAGS.starting_pop == 'random':
+        start_df = df.sample(n=FLAGS.starting_size)
+    else:
+        raise ValueError('Invalid method to selecting starting population.')
+
+    # remove stereo information if stereo set to False
+    if not stereo:
+        start_df['smiles'] = start_df['smiles'].apply(lambda x: Chem.MolToSmiles(Chem.MolFromSmiles(x), canonical=True, isomericSmiles=False))
+    init_fitness = start_df['fitness'].tolist()
+
+    fname = f'data/{FLAGS.target}/starting_smiles.txt'
+    with open(fname, 'w') as f:
+        for smi in start_df['smiles']:
+            f.write(smi+'\n')
+
     # function with specified target
     tar_func = partial(fitness_function, target=FLAGS.target)
     tar_func.__name__ = f'{FLAGS.target}_score'
 
-    fname = f'data/starting_smiles.txt' if stereo else f'data/starting_smiles_noniso.txt'
     output_dir = 'RESULTS_stereo' if stereo else 'RESULTS_nonstereo'
     agent = JANUS(
         work_dir=output_dir,
@@ -184,6 +141,8 @@ if __name__ == '__main__':
     )
 
     agent.run()
+
+    ### TESTING CODE ###
 
     # FITNESS
     # data = pd.read_csv('data/starting_smiles.csv')
@@ -272,6 +231,39 @@ if __name__ == '__main__':
     # import pdb; pdb.set_trace()
 
     
+    ### Plot outliers removal
 
+    # df = pd.read_csv(f'data/{FLAGS.target}/starting_smiles.csv')
+
+    # df = df[df['fitness'] > -900.0] 
+    # _, bins, _ = plt.hist(df['fitness'].to_numpy(), bins=50, range=[-25, 10])
+    # plt.close()
+
+    # fig, ax = plt.subplots(2, 2, figsize=(15,15), sharex=True)
+    # ax = ax.flatten()
+    # # # remove failed jobs and outliers
+    # ax[0].hist(df['fitness'].to_numpy(), bins=bins, density=True, label='original')
+    # ax[0].legend()
+
+    # mu, std = df['fitness'].mean(), df['fitness'].std(axis=0)
+    # new_df = df[df['fitness'] > mu - 3.*std]
+    # new_df = new_df[new_df['fitness'] < mu + 3.*std]
+    # ax[1].hist(new_df['fitness'].to_numpy(), bins=bins, density=True, label=r'$\mu \pm 3\sigma$')
+    # ax[1].legend()
+
+    # q1 = np.quantile(df['fitness'], q = 0.25)
+    # q3 = np.quantile(df['fitness'], q = 0.75)
+    # iqr = q3 - q1
+    # new_df = df[df['fitness'] > q1 - 1.5*iqr]
+    # new_df = new_df[new_df['fitness'] < q3 + 1.5*iqr]
+    # ax[2].hist(new_df['fitness'].to_numpy(), bins=bins, density=True, label=r'IQR')
+    # ax[2].legend()
+
+    # keep = EllipticEnvelope().fit_predict(df[['fitness']].to_numpy())
+    # ax[3].hist(df[keep == 1]['fitness'].to_numpy(), bins=bins, density=True, label=r'Elliptic envelope')
+    # ax[3].legend()
+
+    # plt.savefig(f'data/{FLAGS.target}/histogram.png')
+    # import pdb; pdb.set_trace()
 
 

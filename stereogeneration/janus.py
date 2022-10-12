@@ -249,7 +249,7 @@ class JANUS:
                 all_smiles = list(set(mut_smi_explr + cross_smi_explr))
                 for x in all_smiles:
                     if self.stereo:
-                        smi, _ = assign_stereo(x, self.smiles_collector)
+                        smi = assign_stereo(x, self.smiles_collector)
                     else:
                         smi = x
                     if smi not in self.smiles_collector:
@@ -362,7 +362,7 @@ class JANUS:
                 mut_smi_loc = list(set(mut_smi_loc))
                 for x in mut_smi_loc:
                     if self.stereo:
-                        smi, _ = assign_stereo(x, self.smiles_collector)
+                        smi = assign_stereo(x, self.smiles_collector)
                     else:
                         smi = x
                     if smi not in self.smiles_collector:
