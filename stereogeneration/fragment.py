@@ -12,27 +12,12 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit import RDLogger
 
+from .utils import assign_stereo
+
 RDLogger.DisableLog("rdApp.*")
 
 import warnings
 warnings.simplefilter(action="ignore", category=FutureWarning)
-
-
-def sanitize_smiles(smi):
-    """Return a canonical smile representation of smi
-    Parameters:
-    smi (string) : smile string to be canonicalized 
-    Returns:
-    mol (rdkit.Chem.rdchem.Mol) : RdKit mol object                          (None if invalid smile string smi)
-    smi_canon (string)          : Canonicalized smile representation of smi (None if invalid smile string smi)
-    conversion_successful (bool): True/False to indicate if conversion was  successful 
-    """
-    try:
-        mol = smi2mol(smi, sanitize=True)
-        smi_canon = mol2smi(mol, isomericSmiles=True, canonical=True)
-        return (mol, smi_canon, True)
-    except:
-        return (None, None, False)
 
 
 def get_frags(smi, radius):
@@ -63,10 +48,11 @@ def form_fragments(smi, stereo=True):
         dec_ = decoder(sf)
 
         try:
-            m = Chem.MolFromSmiles(dec_)
             # check for chiral centers
-            if len(Chem.FindMolChiralCenters(m)) == 0 and stereo:
-                continue
+            m = Chem.MolFromSmiles(dec_)                
+            # if len(Chem.FindMolChiralCenters(m)) == 0 and stereo:
+            #     continue
+                
             Chem.Kekulize(m)
             dearom_smiles = Chem.MolToSmiles(
                 m, canonical=True, isomericSmiles=stereo, kekuleSmiles=True

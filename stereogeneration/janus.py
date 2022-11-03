@@ -11,7 +11,7 @@ import numpy as np
 from .crossover import crossover_smiles
 from .mutate import mutate_smiles
 from .network import create_and_train_network, obtain_model_pred
-from .utils import sanitize_smiles, get_fp_scores, assign_stereo, neutralize_radicals
+from .utils import sanitize_smiles, get_fp_scores, assign_stereo, neutralize_radicals, scramble_stereo
 from .fragment import form_fragments
 
 
@@ -95,12 +95,20 @@ class JANUS:
         # make fragments from initial smiles
         self.frag_alphabet = []
         if self.use_fragments:
+            if self.stereo:
+                expanded_smi = []
+                for smi in init_smiles:
+                    expanded_smi.extend(scramble_stereo(smi))
+            else:
+                expanded_smi = init_smiles
+            # expanded_smi = init_smiles
+                
             with multiprocessing.Pool(self.num_workers) as pool:
                 frags = pool.map(
                     partial(
                         form_fragments,
                         stereo=self.stereo
-                    ), init_smiles)
+                    ), expanded_smi)
             frags = self.flatten_list(frags)
             frags = list(set(frags))    # make it unique
             print(f"    Unique and valid fragments generated: {len(frags)}")

@@ -56,16 +56,11 @@ def sanitize_smiles(smi):
         return None
 
 
-def assign_stereo(smi, collector=[]):
-    # pick an assigned stereosmiles (if more than one)
-    mol = Chem.MolFromSmiles(smi)
-    opt = StereoEnumerationOptions(unique=True, onlyUnassigned=True)
-    isomers = list(EnumerateStereoisomers(mol, options=opt))
-
-    # remove nitrogen chiral centres which are enumerated by rdkit
+def remove_nitrogen_chiral_centres(iso_list):
+    # provided a list of isomers (Mol objs)
+    # return isomers without N chiral centres
     new_isomers = []
-    for mol in isomers:
-        atoms = mol.GetAtoms()
+    for mol in iso_list:
         chirality = Chem.FindMolChiralCenters(mol)
         for chir in chirality:
             if mol.GetAtomWithIdx(chir[0]).GetAtomicNum() == 7:
@@ -74,8 +69,30 @@ def assign_stereo(smi, collector=[]):
     
     # remove any duplicates
     new_smiles = [Chem.MolToSmiles(m, canonical=True) for m in new_isomers]
-    _, idx = np.unique(new_smiles, return_index=True)
+    uniq_smiles, idx = np.unique(new_smiles, return_index=True)
     isomers = np.array(new_isomers)[idx].tolist()
+
+    return isomers
+
+
+def scramble_stereo(smi):
+    # return a full list of stereoisomers
+    mol = Chem.MolFromSmiles(smi)
+    opt = StereoEnumerationOptions(unique=True, onlyUnassigned=False)
+    isomers = list(EnumerateStereoisomers(mol, options=opt))
+    # isomers = remove_nitrogen_chiral_centres(isomers)
+    smi_list = [Chem.MolToSmiles(iso, canonical=True, isomericSmiles=True) for iso in isomers]
+    return smi_list
+        
+
+def assign_stereo(smi, collector=[]):
+    # pick an assigned stereosmiles (if more than one)
+    mol = Chem.MolFromSmiles(smi)
+    opt = StereoEnumerationOptions(unique=True, onlyUnassigned=True)
+    isomers = list(EnumerateStereoisomers(mol, options=opt))
+
+    # remove nitrogen chiral centres
+    isomers = remove_nitrogen_chiral_centres(isomers)
 
     # return isomer that is not yet observed
     if len(isomers) > 1:
@@ -89,6 +106,7 @@ def assign_stereo(smi, collector=[]):
         # if none are found, return original smiles
         return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True) #, False
 
+
 def neutralize_radicals(smi):
     mol = smi2mol(smi)
     if mol is None:
@@ -101,9 +119,12 @@ def neutralize_radicals(smi):
             if num_rad > 0:
                 a.SetNumRadicalElectrons(0)
                 a.SetNumExplicitHs(num_rad)
-        smi = mol2smi(mol)
-        return smi
-
+        try:
+            smi = mol2smi(mol)
+            return smi
+        except:
+            return None
+        
 
 
 def get_fp_scores(smiles_back, target_smi):

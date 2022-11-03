@@ -17,6 +17,10 @@ import subprocess
 from argparse import ArgumentParser
 
 def fitness_function(smi: str, target: str = '1SYH', seed: int =30624700):
+    ''' Docking score (maximize) for given target protein. Scored my SMINA.
+    Select from available protein targets: 1OYT, 1SYH, 4LDE, and 6Y2F
+    '''
+
     cwd = os.getcwd()
     tmp_dir = tempfile.TemporaryDirectory(dir='/tmp')
     os.chdir(tmp_dir.name)
