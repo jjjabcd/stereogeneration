@@ -160,4 +160,5 @@ cython_debug/
 #.idea/
 smina/
 zinc_troubleshoot/
+data/zinc.csv
 

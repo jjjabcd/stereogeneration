@@ -44,7 +44,7 @@ if __name__ == '__main__':
     print(f'Stereoisomers? : {stereo}')
 
     # load isoalphabet from zinc dataset
-    fname = 'data/isoalphabet.npz' if stereo else 'data/alphabet.npz'
+    fname = '../data/isoalphabet.npz' if stereo else '../data/alphabet.npz'
     alphabet = np.load(fname, allow_pickle=True)['alphabet'].tolist()
     print(f'Alphabet contains: {len(alphabet)}')
     
@@ -102,7 +102,7 @@ if __name__ == '__main__':
     selfies.set_semantic_constraints(new_constraints)  # update constraints
 
     # get initial fitnesses from csv
-    df = pd.read_csv(f'data/{FLAGS.target}/starting_smiles.csv')
+    df = pd.read_csv(f'../data/{FLAGS.target}/starting_smiles.csv')
 
     # remove failed jobs and outliers
     df = df[df['fitness'] > -100.0] 
@@ -130,7 +130,7 @@ if __name__ == '__main__':
         start_df['smiles'] = start_df['smiles'].apply(lambda x: Chem.MolToSmiles(Chem.MolFromSmiles(x), canonical=True, isomericSmiles=False))
     init_fitness = start_df['fitness'].tolist()
 
-    fname = f'data/{FLAGS.target}/starting_smiles.txt'
+    fname = f'../data/{FLAGS.target}/starting_smiles.txt'
     with open(fname, 'w') as f:
         for smi in start_df['smiles']:
             f.write(smi+'\n')

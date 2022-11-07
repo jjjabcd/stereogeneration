@@ -13,11 +13,17 @@ Virutal environment used created using
 ./make_cc_env.sh
 ```
 
+## JANUS
+Go into `janus` folder.
+
 See `main.py` for running JANUS (with and without stereoinformation). Add custom fitness function in this file. The fitness currently assumes the use of 1 core (modification is necessary).
 
 Use the submission scripts for stereo vs. non-stereo runs:
 ```bash
 sbatch submit_nonstereo.sh  # submit_stereo.sh
 ```
+
+## REINVENT
+Go into `reinvent` folder.
 
 

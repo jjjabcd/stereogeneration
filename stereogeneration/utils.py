@@ -56,14 +56,14 @@ def sanitize_smiles(smi):
         return None
 
 
-def remove_nitrogen_chiral_centres(iso_list):
+def remove_nitrogen_chiral_centres(iso_list, anum=[7]):
     # provided a list of isomers (Mol objs)
-    # return isomers without N chiral centres
+    # return isomers without chiral centres on atomic numbers (anum)
     new_isomers = []
     for mol in iso_list:
         chirality = Chem.FindMolChiralCenters(mol)
         for chir in chirality:
-            if mol.GetAtomWithIdx(chir[0]).GetAtomicNum() == 7:
+            if mol.GetAtomWithIdx(chir[0]).GetAtomicNum() in anum:
                 mol.GetAtomWithIdx(chir[0]).SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
         new_isomers.append(mol)
     
