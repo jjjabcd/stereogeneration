@@ -107,7 +107,7 @@ def train_agent(scoring_function,
         smiles, sequences, likelihoods = [], [], []
         while len(smiles) < batch_size:
             # Sample from Agent
-            seqs, agent_likelihood, _ = Agent.sample(batch_size - len(smiles))
+            seqs, agent_likelihood, _ = Agent.sample(batch_size - len(smiles), temp=1.1)
             
             # Change into canonical smiles and remove the invalids
             valid_smiles, valid_idx = [], []
@@ -125,7 +125,7 @@ def train_agent(scoring_function,
             # Assign stereochemistry if not completely specified
             if stereo:
                 new_seq = []
-                for i, smi in enumerate(valid_smiles):
+                for smi in valid_smiles:
                     smi = assign_stereo(smi, results['smiles'])
                     seq = voc.encode(voc.tokenize(smi))
                     if seq is not None:

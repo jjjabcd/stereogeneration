@@ -122,20 +122,3 @@ if __name__ == "__main__":
 
 
 
-
-    # if arg_dict['scoring_function_kwargs']:
-    #     kwarg_list = arg_dict.pop('scoring_function_kwargs')
-    #     if not len(kwarg_list) % 2 == 0:
-    #         raise ValueError("Scoring function kwargs must be given as pairs, "\
-    #                          "but got a list with odd length.")
-    #     kwarg_dict = {i:j for i, j in zip(kwarg_list[::2], kwarg_list[1::2])}
-    #     arg_dict['scoring_function_kwargs'] = kwarg_dict
-    # else:
-    #     arg_dict['scoring_function_kwargs'] = dict()
-    
-    
-
-
-    # check if prior has been trained, if not, train it
-    
-    

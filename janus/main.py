@@ -34,10 +34,10 @@ if __name__ == '__main__':
     parser.add_argument("--stereo", action="store_true", dest="stereo", help="Toggle stereogeneration, defaults false.", default=False)
     parser.add_argument("--classifier", action="store_true", dest="use_classifier", help="Toggle classifier, defaults false", default=False)
     parser.add_argument("--starting_pop", action="store", type=str, default="worst", help="Method to select starting population: random, worst, best.")
-    parser.add_argument("--starting_size", action="store", type=int, default=5000, help="Number of starting smiles, must be larger than pop size")
+    parser.add_argument("--starting_size", action="store", type=int, default=1000, help="Number of starting smiles, must be larger than pop size")
 
     FLAGS = parser.parse_args()
-    assert FLAGS.target in ['1OYT', '1SYH', '4LDE', '6Y2F'], 'Invalid protein target'
+    assert FLAGS.target in ['1OYT', '1SYH', '6Y2F'], 'Invalid protein target'
     
     fitness_function = docking.fitness_function
     stereo = FLAGS.stereo
@@ -106,12 +106,9 @@ if __name__ == '__main__':
 
     # remove failed jobs and outliers
     df = df[df['fitness'] > -100.0] 
-
-    # mu, std = df['fitness'].mean(), df['fitness'].std()
-    # df = df[df['fitness'] <= mu + 3*std]
-    # df = df[df['fitness'] >= mu - 3*std]
-    # keep = EllipticEnvelope().fit_predict(df[['fitness']].to_numpy())
-    # df = df[keep==1]
+    mu, std = df['fitness'].mean(), df['fitness'].std()
+    df = df[df['fitness'] <= mu + 3*std]
+    df = df[df['fitness'] >= mu - 3*std]
 
     # get the starting smiles and write to file
     # threshold = params_dict['generation_size']
@@ -128,8 +125,10 @@ if __name__ == '__main__':
     # remove stereo information if stereo set to False
     if not stereo:
         start_df['smiles'] = start_df['smiles'].apply(lambda x: Chem.MolToSmiles(Chem.MolFromSmiles(x), canonical=True, isomericSmiles=False))
+    start_df = start_df.drop_duplicates('smiles')
     init_fitness = start_df['fitness'].tolist()
 
+    # write the smiles file, this will be read by JANUS
     fname = f'../data/{FLAGS.target}/starting_smiles.txt'
     with open(fname, 'w') as f:
         for smi in start_df['smiles']:

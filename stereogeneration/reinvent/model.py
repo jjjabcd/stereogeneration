@@ -69,13 +69,14 @@ class RNN():
             entropy += -torch.sum((log_prob * prob), 1)
         return log_probs, entropy
 
-    def sample(self, batch_size, max_length=100):
+    def sample(self, batch_size, max_length=100, temp = 1.0):
         """
             Sample a batch of sequences
 
             Args:
                 batch_size : Number of sequences to sample 
                 max_length:  Maximum length of the sequences
+                temp: Temperature, < 1 more deterministic, > 1 more random
 
             Outputs:
             seqs: (batch_size, seq_length) The sampled sequences.
@@ -97,6 +98,7 @@ class RNN():
 
         for step in range(max_length):
             logits, h = self.rnn(x, h)
+            logits /= temp
             prob = F.softmax(logits, dim=-1)
             log_prob = F.log_softmax(logits, dim=-1)
             x = torch.multinomial(prob, num_samples=1).view(-1)

@@ -11,7 +11,6 @@ import pandas as pd
 import rdkit.Chem as Chem
 from morfeus.conformer import ConformerEnsemble
 
-import multiprocessing
 from functools import partial
 import subprocess
 from argparse import ArgumentParser
@@ -25,7 +24,6 @@ def fitness_function(smi: str, target: str = '1SYH', seed: int =30624700):
     tmp_dir = tempfile.TemporaryDirectory(dir='/tmp')
     os.chdir(tmp_dir.name)
 
-    # smina_path = os.path.join(cwd, 'docking')
     smina_path = os.path.join(os.path.dirname(inspect.getfile(fitness_function)), 'docking')
     target_path = os.path.join(smina_path, target)
 
@@ -33,8 +31,9 @@ def fitness_function(smi: str, target: str = '1SYH', seed: int =30624700):
     t0 = time.time()
 
     # do conformer search using morfeus
+    # both embedding methods give deterministic stereochemistry
     try:
-        ensemble_p = ConformerEnsemble.from_rdkit(smi, optimize="MMFF94", random_seed=seed)
+        ensemble_p = ConformerEnsemble.from_rdkit(smi, optimize="MMFF94") #, random_seed=seed)
         ensemble_p.prune_rmsd()
         ensemble_p.sort()   
         ensemble_p[0:1].write_xyz(f'{name}.xyz')
@@ -44,8 +43,22 @@ def fitness_function(smi: str, target: str = '1SYH', seed: int =30624700):
         print(f'Default to openbabel embedding... for : {smi}')
         _ = subprocess.run(f'obabel -:"{smi}" --gen3d -h -O {name}.pdb --best', shell=True, capture_output=True)
 
+    # get the stereosmiles decided by embedding procedure
+    try: 
+        mol = ensemble_p[0:1].mol
+        mol = Chem.RemoveHs(mol)
+        stereo_smi = Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)
+    except:
+        try:
+            mol = Chem.MolFromPDBFile('mol.pdb')
+            mol = Chem.RemoveHs(mol)
+            stereo_smi = Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)
+        except:
+            stereo_smi = ''
+    
+
+    # run docking procedure
     try:
-        # run docking procedure
         output = subprocess.run(f"{smina_path}/smina.static -r {target_path}/receptor.pdb -l {name}.pdb --autobox_ligand \
             {target_path}/ligand.pdb --autobox_add 3 --exhaustiveness 16 --seed {seed}",
             shell=True, capture_output=True)
@@ -68,7 +81,7 @@ def fitness_function(smi: str, target: str = '1SYH', seed: int =30624700):
         score = -1000.0
         
     with open(os.path.join(cwd, 'OUT_ALL.csv'), 'a') as f:
-        f.write(f'{smi},{score},{time.time() - t0}\n')
+        f.write(f'{smi},{stereo_smi},{score},{time.time() - t0}\n')
 
     os.chdir(cwd)
     tmp_dir.cleanup()

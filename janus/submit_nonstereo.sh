@@ -3,7 +3,7 @@
 #SBATCH --ntasks-per-node=64
 #SBATCH --mem=125000M               # memory (per node)
 #SBATCH --time=0-20:00
-#SBATCH --job-name nonstereo
+#SBATCH --job-name janus-nonstereo
 
 start_time=$SECONDS
 

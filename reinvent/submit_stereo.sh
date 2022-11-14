@@ -4,6 +4,7 @@
 #SBATCH --cpus-per-task=24         # CPU cores/threads
 #SBATCH --mem=125000M              # memory per node
 #SBATCH --time=0-20:00            # time (DD-HH:MM)
+#SBATCH --job-name reinvent-stereo
 
 start_time=$SECONDS
 

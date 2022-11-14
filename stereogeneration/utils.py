@@ -35,28 +35,27 @@ def sanitize_smiles(smi):
     Parameters
     ----------
     smi : str
-        smile string to be canonicalized 
+        smile string to be canonicalized and sanitized
 
     Returns
     -------
-    mol (rdkit.Chem.rdchem.Mol) : 
-        RdKit mol object (None if invalid smile string smi)
     smi_canon (string)          : 
         Canonicalized smile representation of smi (None if invalid smile string smi)
-    conversion_successful (bool): 
-        True/False to indicate if conversion was  successful 
     """
     if smi == '':
         return None
     try:
         mol = smi2mol(smi, sanitize=True)
         smi_canon = mol2smi(mol, isomericSmiles=True, canonical=True)
-        return smi_canon
+        if smi == '':
+            return None
+        else:
+            return smi_canon
     except:
         return None
 
 
-def remove_nitrogen_chiral_centres(iso_list, anum=[7]):
+def remove_specified_chiral_centres(iso_list, anum=[7]):
     # provided a list of isomers (Mol objs)
     # return isomers without chiral centres on atomic numbers (anum)
     new_isomers = []
@@ -69,7 +68,7 @@ def remove_nitrogen_chiral_centres(iso_list, anum=[7]):
     
     # remove any duplicates
     new_smiles = [Chem.MolToSmiles(m, canonical=True) for m in new_isomers]
-    uniq_smiles, idx = np.unique(new_smiles, return_index=True)
+    _, idx = np.unique(new_smiles, return_index=True)
     isomers = np.array(new_isomers)[idx].tolist()
 
     return isomers
@@ -80,7 +79,7 @@ def scramble_stereo(smi):
     mol = Chem.MolFromSmiles(smi)
     opt = StereoEnumerationOptions(unique=True, onlyUnassigned=False)
     isomers = list(EnumerateStereoisomers(mol, options=opt))
-    # isomers = remove_nitrogen_chiral_centres(isomers)
+    isomers = remove_specified_chiral_centres(isomers)
     smi_list = [Chem.MolToSmiles(iso, canonical=True, isomericSmiles=True) for iso in isomers]
     return smi_list
         
@@ -92,7 +91,7 @@ def assign_stereo(smi, collector=[]):
     isomers = list(EnumerateStereoisomers(mol, options=opt))
 
     # remove nitrogen chiral centres
-    isomers = remove_nitrogen_chiral_centres(isomers)
+    isomers = remove_specified_chiral_centres(isomers)
 
     # return isomer that is not yet observed
     if len(isomers) > 1:
