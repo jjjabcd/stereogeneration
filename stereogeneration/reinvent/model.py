@@ -69,7 +69,7 @@ class RNN():
             entropy += -torch.sum((log_prob * prob), 1)
         return log_probs, entropy
 
-    def sample(self, batch_size, max_length=100, temp = 1.0):
+    def sample(self, batch_size, max_length=150, temp = 1.0):
         """
             Sample a batch of sequences
 

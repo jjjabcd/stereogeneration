@@ -42,7 +42,7 @@ def normalize_score(score, r=[-2.0, 15.0], threshold = 0.95):
     scaled_score = 2.0 / (1.0 + np.exp(-slope*(score - centre))) - 1.0
     return scaled_score
 
-def padded_concat(arrays, pad_val = 0, max_length = 100):
+def padded_concat(arrays, pad_val = 0, max_length = 150):
     # pad_len = max(len(s) for s in arrays)
     padded = []
     for arr in arrays:
@@ -104,67 +104,74 @@ def train_agent(scoring_function,
             'generation': [],
         }
         
-        smiles, sequences, likelihoods = [], [], []
-        while len(smiles) < batch_size:
-            # Sample from Agent
-            seqs, agent_likelihood, _ = Agent.sample(batch_size - len(smiles), temp=1.1)
-            
-            # Change into canonical smiles and remove the invalids
-            valid_smiles, valid_idx = [], []
-            sampled_smiles = seq_to_smiles(seqs, voc)
-            for i, smi in enumerate(sampled_smiles):
-                smi = sanitize_smiles(smi)
-                if smi is not None:
-                    valid_idx.append(i)
-                    valid_smiles.append(smi)
-            if len(valid_smiles) == 0:
-                continue
-            agent_likelihood = agent_likelihood[valid_idx]
-            seqs = seqs[valid_idx]
-            
-            # Assign stereochemistry if not completely specified
-            if stereo:
-                new_seq = []
-                for smi in valid_smiles:
-                    smi = assign_stereo(smi, results['smiles'])
-                    seq = voc.encode(voc.tokenize(smi))
-                    if seq is not None:
-                        seq = seq.astype(int)
-                        smiles.append(smi)
-                        new_seq.append(seq)
-                new_seq = padded_concat(new_seq)
-                sequences.append(new_seq)
-                sequences = np.concatenate(sequences, axis=0)
+        # Sampling procedure (use no_grad to save memory and speed)
+        smiles, sequences = [], []
+        timeout_count = 0
+        temp = 1.1
+        with torch.no_grad():
+            while len(smiles) < batch_size:
+                seqs, _, _ = Agent.sample(batch_size - len(smiles), temp=temp)
+                sampled_smiles = seq_to_smiles(seqs, voc)
 
-                llh, _ = Agent.likelihood(Variable(new_seq))
-                likelihoods.append(llh)
-                likelihoods = torch.concat(likelihoods, dim=0)
-            else:
-                smiles.extend(valid_smiles)                 # list of strings
-                sequences.append(padded_concat(seqs.cpu().numpy()))        # list of np.array
-                sequences = np.concatenate(sequences, axis=0)
-                # sequences = padded_concat(sequences)
+                # timeout not reached yet
+                if timeout_count < 5:
+                    valid_smiles, valid_idx = [], []
+                    for i, smi in enumerate(sampled_smiles):
+                        smi = sanitize_smiles(smi)
+                        # only keep if valid
+                        if smi is not None:
+                            valid_idx.append(i)
+                            valid_smiles.append(smi)
 
-                likelihoods.append(agent_likelihood)        # list of torch.tensor
-                likelihoods = torch.concat(likelihoods, dim=0)
+                    if len(valid_smiles) == 0:
+                        continue
+                    seqs = seqs[valid_idx]
 
-            # Remove duplicates, ie only consider unique seqs
-            smiles, unique_idxs = np.unique(smiles, return_index=True)
-            smiles = smiles.tolist()
-            sequences = [sequences[unique_idxs]]
-            likelihoods = [likelihoods[unique_idxs]]
+                else:
+                    # timed out!
+                    valid_smiles = sampled_smiles
+                    
 
-            print(f'Successfully sampled {len(smiles)}/{batch_size} smiles.')
+                # assign stereochemistry if necessary
+                if stereo:
+                    new_seq = []
+                    for smi in valid_smiles:
+                        smi = assign_stereo(smi, results['smiles'])
+                        seq = voc.encode(voc.tokenize(smi))
+                        if seq is not None:     # if there are invalid tokens...
+                            seq = seq.astype(int)
+                            smiles.append(smi)
+                            new_seq.append(seq)
+                    if len(new_seq) == 0:
+                        continue
+                    new_seq = padded_concat(new_seq)
+                    sequences.append(new_seq)
+                else:
+                    smiles.extend(valid_smiles)
+                    sequences.append(padded_concat(seqs.cpu().numpy()))
 
-        # truncate to the generation size
-        smiles = smiles[:batch_size]
-        sequences = sequences[0][:batch_size]
-        likelihoods = likelihoods[0][:batch_size]
+                # sampling timeout          
+                if timeout_count == 5:
+                    print(f'Sampling timeout... total of {len(smiles)}!')
+                    break
+
+                print(f'Successfully sampled {len(smiles)}/{batch_size} smiles.')
+                timeout_count += 1
+
+        # calculate likelihoods from the generated sequences
+        # while smiles may be invalid, the sequences are still valid
+        # these jobs will fail, and be scored -1
+        sequences = np.concatenate(sequences, axis=0)
+        # smiles = smiles[:batch_size]
+        # sequences = Variable(sequences[:batch_size])
+        sequences = Variable(sequences)
+        agent_likelihood, _ = Agent.likelihood(sequences)
+        prior_likelihood, _ = Prior.likelihood(sequences)
 
         # Get prior likelihood and score
-        prior_likelihood, _ = Prior.likelihood(Variable(sequences))
         with multiprocessing.Pool(num_workers) as pool:
             fitness = pool.map(scoring_function, smiles)
+
         # normalize for the scaled score
         score = normalize_score(fitness)
 
@@ -189,7 +196,7 @@ def train_agent(scoring_function,
 
         # Calculate augmented likelihood
         augmented_likelihood = prior_likelihood + sigma * Variable(score)
-        loss = torch.pow((augmented_likelihood - likelihoods), 2)
+        loss = torch.pow((augmented_likelihood - agent_likelihood), 2)
 
         # Experience Replay
         # First sample
@@ -199,7 +206,7 @@ def train_agent(scoring_function,
             exp_augmented_likelihood = exp_prior_likelihood + sigma * exp_score
             exp_loss = torch.pow((Variable(exp_augmented_likelihood) - exp_agent_likelihood), 2)
             loss = torch.cat((loss, exp_loss), 0)
-            likelihoods = torch.cat((likelihoods, exp_agent_likelihood), 0)
+            agent_likelihood = torch.cat((agent_likelihood, exp_agent_likelihood), 0)
 
         # Then add new experience
         prior_likelihood = prior_likelihood.data.cpu().numpy()
@@ -210,7 +217,7 @@ def train_agent(scoring_function,
         loss = loss.mean()
 
         # Add regularizer that penalizes high likelihood for the entire sequence
-        loss_p = - (1.0 / likelihoods).mean()
+        loss_p = - (1.0 / agent_likelihood).mean()
         loss += 5 * 1e3 * loss_p
 
         # Calculate gradients and make an update to the network weights
@@ -220,17 +227,18 @@ def train_agent(scoring_function,
 
         # Convert to numpy arrays so that we can print them
         augmented_likelihood = augmented_likelihood.data.cpu().numpy()
-        likelihoods = likelihoods.data.cpu().numpy()
+        agent_likelihood = agent_likelihood.data.cpu().numpy()
 
         # Print some information for this step
         time_elapsed = (time.time() - start_time) / 3600
         time_left = (time_elapsed * ((n_steps - step) / (step + 1)))
         print(f"\n       Step {step}   Time elapsed: {time_elapsed:.2f}h    Approx Time left: {time_left:.2f}h")
+        print(f"Fraction of valid smiles: {fraction_valid_smiles(smiles)*100}%")
         print("Sample of results: ")
         print("  Agent    Prior   Target   Score   Fitness             SMILES")
 
-        for i in range(min(len(likelihoods),5)):
-            print(" {:6.2f}   {:6.2f}  {:6.2f}  {:6.2f}   {:6.2f}     {}".format(likelihoods[i],
+        for i in range(min(len(agent_likelihood),5)):
+            print(" {:6.2f}   {:6.2f}  {:6.2f}  {:6.2f}   {:6.2f}     {}".format(agent_likelihood[i],
                                                                        prior_likelihood[i],
                                                                        augmented_likelihood[i],
                                                                        score[i],

@@ -34,7 +34,7 @@ if __name__ == '__main__':
     parser.add_argument("--stereo", action="store_true", dest="stereo", help="Toggle stereogeneration, defaults false.", default=False)
     parser.add_argument("--classifier", action="store_true", dest="use_classifier", help="Toggle classifier, defaults false", default=False)
     parser.add_argument("--starting_pop", action="store", type=str, default="worst", help="Method to select starting population: random, worst, best.")
-    parser.add_argument("--starting_size", action="store", type=int, default=1000, help="Number of starting smiles, must be larger than pop size")
+    parser.add_argument("--starting_size", action="store", type=int, default=5000, help="Number of starting smiles, must be larger than pop size")
 
     FLAGS = parser.parse_args()
     assert FLAGS.target in ['1OYT', '1SYH', '6Y2F'], 'Invalid protein target'
@@ -105,10 +105,12 @@ if __name__ == '__main__':
     df = pd.read_csv(f'../data/{FLAGS.target}/starting_smiles.csv')
 
     # remove failed jobs and outliers
-    df = df[df['fitness'] > -100.0] 
-    mu, std = df['fitness'].mean(), df['fitness'].std()
-    df = df[df['fitness'] <= mu + 3*std]
-    df = df[df['fitness'] >= mu - 3*std]
+    df = df[df['fitness'] > -900.0] 
+    keep = EllipticEnvelope().fit_predict(df[['fitness']].to_numpy())
+    df = df[keep==1]
+    # mu, std = df['fitness'].mean(), df['fitness'].std()
+    # df = df[df['fitness'] <= mu + 3*std]
+    # df = df[df['fitness'] >= mu - 3*std]
 
     # get the starting smiles and write to file
     # threshold = params_dict['generation_size']

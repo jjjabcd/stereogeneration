@@ -47,7 +47,7 @@ def sanitize_smiles(smi):
     try:
         mol = smi2mol(smi, sanitize=True)
         smi_canon = mol2smi(mol, isomericSmiles=True, canonical=True)
-        if smi == '':
+        if smi_canon == '' or mol is None:
             return None
         else:
             return smi_canon
@@ -85,8 +85,15 @@ def scramble_stereo(smi):
         
 
 def assign_stereo(smi, collector=[]):
+    ''' Assign stereochemistry to smiles randomly.
+    Return the same smile if invalid.
+    Check that smiles is not already found in collector.
+    '''
+    
     # pick an assigned stereosmiles (if more than one)
     mol = Chem.MolFromSmiles(smi)
+    if mol is None:
+        return smi
     opt = StereoEnumerationOptions(unique=True, onlyUnassigned=True)
     isomers = list(EnumerateStereoisomers(mol, options=opt))
 
@@ -104,6 +111,7 @@ def assign_stereo(smi, collector=[]):
     else:
         # if none are found, return original smiles
         return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True) #, False
+
 
 
 def neutralize_radicals(smi):
