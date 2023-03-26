@@ -109,10 +109,12 @@ class JANUS:
                         form_fragments,
                         stereo=self.stereo
                     ), expanded_smi)
+
             frags = self.flatten_list(frags)
             frags = list(set(frags))    # make it unique
             print(f"    Unique and valid fragments generated: {len(frags)}")
             self.frag_alphabet.extend(frags)
+
 
         # get initial fitness
         if starting_fitness is None:
@@ -503,36 +505,36 @@ class JANUS:
         idx_sort = fitness.argsort()[::-1]  # Best -> Worst
         keep_ratio = 0.2
         keep_idx = int(len(list(idx_sort)) * keep_ratio)
-        try:
+        # try:
 
-            F_50_val = fitness[idx_sort[keep_idx]]
-            F_25_val = np.array(fitness) - F_50_val
-            F_25_val = np.array([x for x in F_25_val if x < 0]) + F_50_val
-            F_25_sort = F_25_val.argsort()[::-1]
-            F_25_val = F_25_val[F_25_sort[0]]
+        #     F_50_val = fitness[idx_sort[keep_idx]]
+        #     F_25_val = np.array(fitness) - F_50_val
+        #     F_25_val = np.array([x for x in F_25_val if x < 0]) + F_50_val
+        #     F_25_sort = F_25_val.argsort()[::-1]
+        #     F_25_val = F_25_val[F_25_sort[0]]
 
-            prob_ = 1.0 / (3.0 ** ((F_50_val - fitness) / (F_50_val - F_25_val)) + 1)
+        #     prob_ = 1.0 / (3.0 ** ((F_50_val - fitness) / (F_50_val - F_25_val)) + 1)
 
-            prob_ = prob_ / sum(prob_)
-            to_keep = np.random.choice(generation_size, keep_idx, p=prob_)
-            to_replace = [i for i in range(generation_size) if i not in to_keep][
-                0 : generation_size - len(to_keep)
-            ]
+        #     # prob_ = prob_ / sum(prob_)
+        #     to_keep = np.random.choice(generation_size, keep_idx, p=prob_, replace=False)
+        #     to_replace = [i for i in range(generation_size) if i not in to_keep][
+        #         0 : generation_size - len(to_keep)
+        #     ]
 
-            keep_smiles = [population[i] for i in to_keep]
-            replace_smiles = [population[i] for i in to_replace]
+        #     keep_smiles = [population[i] for i in to_keep]
+        #     replace_smiles = [population[i] for i in to_replace]
 
-            best_smi = population[idx_sort[0]]
-            if best_smi not in keep_smiles:
-                keep_smiles.append(best_smi)
-                if best_smi in replace_smiles:
-                    replace_smiles.remove(best_smi)
+        #     best_smi = population[idx_sort[0]]
+        #     if best_smi not in keep_smiles:
+        #         keep_smiles.append(best_smi)
+        #         if best_smi in replace_smiles:
+        #             replace_smiles.remove(best_smi)
 
-            if keep_smiles == [] or replace_smiles == []:
-                raise Exception("Badly sampled population!")
-        except:
-            keep_smiles = [population[i] for i in idx_sort[:keep_idx]]
-            replace_smiles = [population[i] for i in idx_sort[keep_idx:]]
+        #     if keep_smiles == [] or replace_smiles == []:
+        #         raise Exception("Badly sampled population!")
+        # except:
+        keep_smiles = [population[i] for i in idx_sort[:keep_idx]]
+        replace_smiles = [population[i] for i in idx_sort[keep_idx:]]
 
         return keep_smiles, replace_smiles
 

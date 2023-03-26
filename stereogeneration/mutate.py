@@ -107,6 +107,9 @@ def mutate_smiles(
     mol = Chem.MolFromSmiles(smile)
     Chem.Kekulize(mol)
 
+
+    num_sample_frags = len(alphabet) if len(alphabet) < num_sample_frags else num_sample_frags
+
     # Obtain randomized orderings of the SMILES:
     mutated_smiles_canon = []
     for _ in range(num_random_samples):

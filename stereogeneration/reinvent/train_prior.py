@@ -69,7 +69,7 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
             optimizer.step()
 
             # Every 500 steps we decrease learning rate and print some information
-            if step % 50 == 0 and step != 0:
+            if step % 100 == 0 and step != 0:
                 decrease_learning_rate(optimizer, decrease_by=0.003)
                 if verbose:
                     tqdm.write("*" * 50)
@@ -92,7 +92,7 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
                     tqdm.write("*" * 50 + "\n")
                 else:
                     print("\n{:>4.1f}% valid SMILES".format(100 * valid / len(seqs)))
-                # torch.save(Prior.rnn.state_dict(), "data/Prior.ckpt")
+
 
         # validation loop
         Prior.rnn.eval()
@@ -102,12 +102,20 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
                 seqs = batch.long()
                 log_p, _ = Prior.likelihood(seqs)
                 val_loss += - log_p.mean()
-
         val_loss /= len(valid_data)
+
+        print(f'Epoch   {epoch}: validation loss = {val_loss}')
+
         stop = early_stop.check_criteria(Prior.rnn, epoch, val_loss.item())
         if stop:
             Prior.rnn = early_stop.restore_best(Prior.rnn)
             break
+
+        # save checkpoint    
+        if stereo:
+            torch.save(Prior.rnn.state_dict(), f"{store_path}/Prior_checkpoint_stereo.ckpt")
+        else:
+            torch.save(Prior.rnn.state_dict(), f"{store_path}/Prior_checkpoint_nonstereo.ckpt")
 
         Prior.rnn.train()
 

@@ -94,59 +94,74 @@ def train_agent(scoring_function,
         }
         
         # Sampling procedure (use no_grad to save memory and speed)
-        # smiles, sequences = [], []
+        smiles, sequences = [], []
+        timeout_count = 0
         temp = 1.0
         with torch.no_grad():
-            seqs, _, _ = Agent.sample(batch_size, temp=temp)
-            seqs = seqs.cpu()
-            sampled_smiles = seq_to_smiles(seqs, voc)
+            while len(smiles) < batch_size:
+                seqs, _, _ = Agent.sample(batch_size, temp=temp)
+                sampled_smiles = seq_to_smiles(seqs, voc)
 
-            valid_smiles, valid_sequences = [], []
-            invalid_smiles, invalid_sequences = [], []
-            for smi, seq in zip(sampled_smiles, seqs):
-                cleaned_smi = sanitize_smiles(smi)
+                # timeout not reached yet
+                if timeout_count < 5:
+                    valid_smiles, valid_idx = [], []
+                    for i, smi in enumerate(sampled_smiles):
+                        smi = sanitize_smiles(smi)
 
-                # valid
-                if cleaned_smi is not None and passes_filter(cleaned_smi):
-                    if stereo:
-                        stereo_smi = assign_stereo(cleaned_smi, results['smiles'])
-                        stereo_seq = voc.encode(voc.tokenize(stereo_smi))
-                        if stereo_seq is not None:
-                            stereo_seq = stereo_seq.astype(int)
-                            valid_smiles.append(stereo_smi)
-                            valid_sequences.append(stereo_seq)
-                        else:
-                            invalid_smiles.append(smi)
-                            invalid_sequences.append(seq)
-                    else:
-                        valid_smiles.append(smi)
-                        valid_sequences.append(seq)
-                # invalid
+                        # only keep if valid and passes filter
+                        if smi is not None and passes_filter(smi):
+                            valid_idx.append(i)
+                            valid_smiles.append(smi)
+
+                    if len(valid_smiles) == 0:
+                        continue
+                    seqs = seqs[valid_idx]
+
                 else:
-                    invalid_smiles.append(smi)
-                    invalid_sequences.append(seq)
+                    # timed out!
+                    valid_smiles = sampled_smiles
+                    
 
-        sequences = valid_sequences + invalid_sequences
-        pad_len = max([len(s) for s in sequences])
-        sequences = padded_concat(sequences, max_length=pad_len)
+                # assign stereochemistry if necessary
+                if stereo:
+                    new_seq = []
+                    for smi in valid_smiles:
+                        smi = assign_stereo(smi, results['smiles'])
+                        seq = voc.encode(voc.tokenize(smi))
+                        if seq is not None:     # if there are invalid tokens...
+                            seq = seq.astype(int)
+                            smiles.append(smi)
+                            new_seq.append(seq)
+                    if len(new_seq) == 0:
+                        continue
+                    new_seq = padded_concat(new_seq)
+                    sequences.append(new_seq)
+                else:
+                    smiles.extend(valid_smiles)
+                    sequences.append(padded_concat(seqs.cpu().numpy()))
+
+                # sampling timeout          
+                if timeout_count == 5:
+                    print(f'Sampling timeout... total of {len(smiles)}!')
+                    break
+
+                print(f'Successfully sampled {len(smiles)} smiles.')
+                timeout_count += 1
 
         # calculate likelihoods from the generated sequences
         # while smiles may be invalid, the sequences are still valid 
         # these jobs will fail, and be scored -1
-        # sequences = np.concatenate(sequences, axis=0)
-        num_val = len(valid_smiles)
-        smiles = valid_smiles + invalid_smiles
+        sequences = np.concatenate(sequences, axis=0)
+        smiles = smiles[:batch_size]
+        sequences = sequences[:batch_size]
 
         sequences = Variable(sequences)
         agent_likelihood, _ = Agent.likelihood(sequences)
         prior_likelihood, _ = Prior.likelihood(sequences)
 
         # Get prior likelihood and score
-        print(f'Total of {num_val}/{batch_size} passed the filter.')
         with multiprocessing.Pool(num_workers) as pool:
-            valid_fitness = pool.map(scoring_function, valid_smiles)
-        invalid_fitness = [-200.]*len(invalid_smiles)
-        fitness = valid_fitness + invalid_fitness
+            fitness = pool.map(scoring_function, smiles)
 
         # normalize for the scaled score
         score = normalize_score(fitness)

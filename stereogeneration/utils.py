@@ -131,7 +131,44 @@ def neutralize_radicals(smi):
             return smi
         except:
             return None
-        
+
+
+def neutralize_smiles(smi):
+    mol = Chem.MolFromSmiles(smi)
+    table = Chem.GetPeriodicTable()
+
+    #charges check, with exceptions
+    functional_groups = [
+        ['[N+0]=[N+]=[N-]',(1,2)], #azide
+        ['[N+]#[C-]',(0,1)], #isonitrile
+        ['[N+](-[O-])=[O]',(0,1)], #nitro
+        # ['[C](-[N])=[N+]',(2,)], #amidinium and guanidinium
+    ]
+    ignore_charge = []
+    for j in functional_groups:
+        functional_group = Chem.MolFromSmarts(j[0])
+        matches = mol.GetSubstructMatches(functional_group)
+        if matches:
+            for k in matches:
+                for l in j[1]:
+                    ignore_charge.append(k[l])
+
+    for j in mol.GetAtoms():
+        if table.GetValenceList(j.GetSymbol())[0] < j.GetTotalValence(): #cations
+            if j.GetTotalNumHs() == 0:
+                continue
+            elif j.GetIdx() in ignore_charge: #cations that should remain cations
+                continue
+            else:
+                j.SetFormalCharge(0) #sets formal charge to 0
+                j.SetNumExplicitHs(j.GetTotalNumHs() - 1) # gets number of H, then remove 1
+        elif table.GetValenceList(j.GetSymbol())[0] > j.GetTotalValence(): #anions
+            if j.GetIdx() in ignore_charge: #anions that should remain anions
+                continue
+            else:
+                j.SetFormalCharge(0) #sets formal charge to 0
+                j.SetNumExplicitHs(j.GetTotalNumHs() + 1) # gets number of H, then add 1
+    return Chem.CanonSmiles(Chem.MolToSmiles(mol))
 
 
 def get_fp_scores(smiles_back, target_smi):
@@ -175,3 +212,5 @@ def from_yaml(work_dir,
     })
 
     return params
+
+

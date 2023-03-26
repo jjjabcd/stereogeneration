@@ -42,10 +42,11 @@ def form_fragments(smi, stereo=True):
     unique_frags = get_frags(smi, radius=3)
     for item in unique_frags:
         # encode and decode from selfies
-        sf = encoder(item)
-        if sf is None:
+        try:
+            sf = encoder(item)
+            dec_ = decoder(sf)
+        except:
             continue
-        dec_ = decoder(sf)
 
         try:
             # check for chiral centers

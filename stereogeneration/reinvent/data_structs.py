@@ -150,6 +150,7 @@ class Experience(object):
             raise IndexError('Size of memory ({}) is less than requested sample ({})'.format(len(self), n))
         else:
             scores = [x[1] for x in self.memory]
+            scores = np.array(scores) + 1.0         # since score range from -1 to 1
             sample = np.random.choice(len(self), size=n, replace=False, p=scores/np.sum(scores))
             sample = [self.memory[i] for i in sample]
             smiles = [x[0] for x in sample]
