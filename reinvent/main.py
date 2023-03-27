@@ -28,9 +28,9 @@ parser.add_argument('--learning_rate', action='store', dest='learning_rate',
 parser.add_argument('--num_steps', action='store', dest='n_steps', type=int,
                     default=50)
 parser.add_argument('--batch_size', action='store', dest='batch_size', type=int,
-                    default=100)
+                    default=200)
 parser.add_argument('--sigma', action='store', dest='sigma', type=int,
-                    default=20)
+                    default=12)
 parser.add_argument('--experience', action='store', dest='experience_replay', type=int,
                     default=0, help='Number of experience sequences to sample each step. '\
                     '0 means no experience replay.')
@@ -63,7 +63,10 @@ if __name__ == "__main__":
     assert FLAGS.target in ['1OYT', '1SYH', '6Y2F'], 'Invalid protein target'
 
     # read the dataset
-    df = pd.read_csv(f'../data/{FLAGS.target}/starting_smiles.csv')
+    df = pd.read_csv(f'../data/zinc.csv')
+    df = df[['isosmiles', FLAGS.target]].rename(
+        columns={'isosmiles':'smiles', FLAGS.target: 'fitness'}
+    )
     print(f'Stereoinformation? : {FLAGS.stereo}')
 
     # write file of smiles (if required)
@@ -98,7 +101,7 @@ if __name__ == "__main__":
     if not os.path.exists(prior_path) or FLAGS.overwrite:
         pretrain_dict = {
             'num_epochs': 100,
-            'train_ratio': 0.8,
+            'train_ratio': 0.85,
             'verbose': True,
             'stereo': FLAGS.stereo,
         }

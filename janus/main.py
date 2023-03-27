@@ -95,22 +95,23 @@ if __name__ == '__main__':
     }
 
     # Set your SELFIES constraints (below used for manuscript)
-    default_constraints = selfies.get_semantic_constraints()
-    new_constraints = default_constraints
-    new_constraints['S'] = 2
-    new_constraints['P'] = 3
-    selfies.set_semantic_constraints(new_constraints)  # update constraints
+    # default_constraints = selfies.get_semantic_constraints()
+    # new_constraints = default_constraints
+    # new_constraints['S'] = 2
+    # new_constraints['P'] = 3
+    # selfies.set_semantic_constraints(new_constraints)  # update constraints
 
     # get initial fitnesses from csv
-    df = pd.read_csv(f'../data/{FLAGS.target}/starting_smiles.csv')
+    df = pd.read_csv('../data/zinc.csv')
+    df = df[['isosmiles', FLAGS.target]].rename(
+        columns={'isosmiles':'smiles', FLAGS.target: 'fitness'}
+    )
 
-    # remove failed jobs and outliers
+    # remove failed jobs
     df = df[df['fitness'] > -900.0] 
-    keep = EllipticEnvelope().fit_predict(df[['fitness']].to_numpy())
-    df = df[keep==1]
-    # mu, std = df['fitness'].mean(), df['fitness'].std()
-    # df = df[df['fitness'] <= mu + 3*std]
-    # df = df[df['fitness'] >= mu - 3*std]
+
+    # keep only molecules that pass the filter
+    # df = df[df['smiles'].apply(passes_filter)]
 
     # get the starting smiles and write to file
     # threshold = params_dict['generation_size']
@@ -274,5 +275,11 @@ if __name__ == '__main__':
 
     # plt.savefig(f'data/{FLAGS.target}/histogram.png')
     # import pdb; pdb.set_trace()
+
+    # keep = EllipticEnvelope().fit_predict(df[['fitness']].to_numpy())
+    # df = df[keep==1]
+    # mu, std = df['fitness'].mean(), df['fitness'].std()
+    # df = df[df['fitness'] <= mu + 3*std]
+    # df = df[df['fitness'] >= mu - 3*std]
 
 

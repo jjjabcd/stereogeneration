@@ -2,7 +2,7 @@
 #SBATCH --account=rrg-aspuru
 #SBATCH --ntasks-per-node=64
 #SBATCH --mem=125000M               # memory (per node)
-#SBATCH --time=0-20:00
+#SBATCH --time=0-15:00
 #SBATCH --job-name janus-stereo
 
 start_time=$SECONDS

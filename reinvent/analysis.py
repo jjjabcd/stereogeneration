@@ -6,11 +6,14 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 import rdkit.Chem as Chem
+from rdkit import RDLogger
 from rdkit.Chem import Draw
 from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
 
 from argparse import ArgumentParser
 from tqdm import tqdm
+
+RDLogger.DisableLog('rdApp.*')
 
 RUN_TYPES = ['stereo', 'nonstereo']
 CMAP = {n: sns.color_palette()[i]  for i, n in enumerate(RUN_TYPES)}
@@ -62,6 +65,7 @@ if __name__ == '__main__':
         new_df = {'generation': [], 'avg_fitness': [], 'best_fitness': [], 
             'run_type': [], 'is_stereo_percent': []}
         for gen, gdf in df.groupby('generation'):
+            gdf = gdf[gdf['fitness'] > -200.0]
             new_df['generation'].append(int(gen))
             new_df['avg_fitness'].append(gdf['fitness'].mean())
             new_df['run_type'].append(run_type)

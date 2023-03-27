@@ -3,7 +3,7 @@
 #SBATCH --gres=gpu:1              # Number of GPU(s) per node
 #SBATCH --cpus-per-task=24         # CPU cores/threads
 #SBATCH --mem=125000M              # memory per node
-#SBATCH --time=0-20:00            # time (DD-HH:MM)
+#SBATCH --time=0-10:00            # time (DD-HH:MM)
 #SBATCH --job-name reinvent-nonstereo
 
 start_time=$SECONDS
@@ -25,4 +25,3 @@ duration=$(( $end_time - $start_time ))
 
 echo "stuff took $duration seconds to complete"
 
-deactivate
