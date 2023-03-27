@@ -203,7 +203,7 @@ def passes_filter(smi):
         substructure_violations(mol) == False and 
         np.abs(rdc.GetFormalCharge(mol)) <= 2 and
         num_charge_species(mol) <= 5 and
-        mol_hydrogen.GetNumAtoms() <= 100 and
+        mol_hydrogen.GetNumAtoms() <= 70 and
         Descriptors.NumRadicalElectrons(mol) == 0
     ): 
         return True
