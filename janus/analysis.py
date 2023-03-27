@@ -118,7 +118,7 @@ if __name__ == '__main__':
     plt.close()
 
     sns.lineplot(data=pop_results, x='Generation', y=f'Average {FLAGS.target} score in population', hue='run_type', palette=CMAP)
-    plt.savefig('trace_average.png')
+    plt.savefig('trace_average.png', bbox_inches='tight')
     plt.close()
 
 
