@@ -132,7 +132,7 @@ if __name__ == '__main__':
     init_fitness = start_df['fitness'].tolist()
 
     # write the smiles file, this will be read by JANUS
-    fname = f'../data/{FLAGS.target}/starting_smiles.txt'
+    fname = f'{FLAGS.target}_starting_smiles.txt'
     with open(fname, 'w') as f:
         for smi in start_df['smiles']:
             f.write(smi+'\n')

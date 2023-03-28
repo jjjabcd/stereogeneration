@@ -81,8 +81,11 @@ def substructure_match_with_exception(mol, forbidden_fragments, exceptions):
     return violation
 
 def debug_substructure_violations(smiles_list):
-    # frags = ['[!n;!N][ND1H2]','[!n;!N][ND1H3+]','[!n;!N][ND2H1][!n;!N]','[!n;!N][ND2H2+][!n;!N]','[!n;!N][ND3]([!n;!N])[!n;!N]','[!n;!N][ND3H1+]([!n;!N])[!n;!N]','[!n;!N][ND4+]([!n;!N])([!n;!N])[!n;!N]']
-    frags = ['[!n;!N][ND1H2+0]','[!n;!N][ND1H3+]','[!n;!N][ND2H1+0][!n;!N]','[!n;!N][ND2H2+][!n;!N]','[!n;!N][ND3+0]([!n;!N])[!n;!N]','[!n;!N][ND3H1+]([!n;!N])[!n;!N]','[!n;!N][ND4+]([!n;!N])([!n;!N])[!n;!N]']
+    frags = [
+        '[!n;!N][ND1H2+0]','[!n;!N][ND1H3+]','[!n;!N][ND2H1+0][!n;!N]','[!n;!N][ND2H2+][!n;!N]',
+        '[!n;!N][ND3+0]([!n;!N])[!n;!N]','[!n;!N][ND3H1+]([!n;!N])[!n;!N]',
+        '[!n;!N][ND4+]([!n;!N])([!n;!N])[!n;!N]'
+    ]
     
     counts = {k: 0 for k in frags}
     for s in smiles_list:
@@ -107,15 +110,16 @@ def substructure_violations(mol):
     # 'a~[*;R2]~a', '[O-]', '[N-]', '[*+]', '[*-]', '[N,n,O,o,S,s]~[N,n,O,o,S,s]~[N,n,O,o,S,s]', 
     # '[N,n,O,o,S,s]~[N,n,O,o,S,s]~[C,c]=,:[O,o,S,s,N,n;!R]', '*=[S,s;!R]', '[A;R]=[*;R2]', 
     # '[S&X4]', '[S&X3]','[O,o,S,s]~[O,o,S,s]',  '*=N-[*;!R]',  '[P,p]','[B,b,N,n,O,o,S,s]~[F,Cl,Br,I]', 
-    # ['[!n;!N][ND1H2]','[!n;!N][ND1H3+]','[!n;!N][ND2H1][!n;!N]','[!n;!N][ND2H2+][!n;!N]','[!n;!N][ND3]([!n;!N])[!n;!N]','[!n;!N][ND3H1+]([!n;!N])[!n;!N]','[!n;!N][ND4+]([!n;!N])([!n;!N])[!n;!N]']
+    # ['[!n;!N][ND1H2]','[!n;!N][ND1H3+]','[!n;!N][ND2H1][!n;!N]','[!n;!N][ND2H2+][!n;!N]',
+    # '[!n;!N][ND3]([!n;!N])[!n;!N]','[!n;!N][ND3H1+]([!n;!N])[!n;!N]','[!n;!N][ND4+]([!n;!N])([!n;!N])[!n;!N]']
 
     # perform filter for non-charged
     forbidden_fragments = [
         '*1=**=*1', '*=*1*=***=*1', '[PH]', '[pH]', '[N&X5]', '[S&X4]',
-        '[S&X5]', '[S&X6]', '[N,n,O,o,S,s]~[F,Cl,Br,I]', '[PH2]', '[N+0]=[O+0]'
+        '[S&X5]', '[S&X6]', '[N,n,O,o,S,s]~[F,Cl,Br,I]', '[PH2]', '[N+0]=[O+0]',
         '*=*=*', '*#*', '[O,o]~[O,o]', '[O,o,S,s]!=[O,o,S,s]!=[O,o,S,s]', 
         '[O,o,S,s]~[O,o,S,s]~[C,c]=,:[O,o,S,s;!R]', 
-        '[N;R]-[N;!R]', '[N;R]-[N;R]', '[N]~[N]~[N]', '[*+]', '[*-]', '[N]-[N]'
+        '[N;R]-[N;!R]', '[N;R]-[N;R]', '[N]~[N]~[N]', '[*+]', '[*-]', '[N]-[N]',
     ]
     exceptions = [
         ['[S&X4](=[O])(=[O])', (0,1,2)],

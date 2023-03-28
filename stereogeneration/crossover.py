@@ -39,10 +39,10 @@ def get_fp_scores(smiles_back, target_smi):
     """
     smiles_back_scores = []
     target = Chem.MolFromSmiles(target_smi)
-    fp_target = AllChem.GetMorganFingerprint(target, 2)
+    fp_target = AllChem.GetMorganFingerprint(target, 2, useChirality=True)
     for item in smiles_back:
         mol = Chem.MolFromSmiles(item)
-        fp_mol = AllChem.GetMorganFingerprint(mol, 2)
+        fp_mol = AllChem.GetMorganFingerprint(mol, 2, useChirality=True)
         score = TanimotoSimilarity(fp_mol, fp_target)
         smiles_back_scores.append(score)
     return smiles_back_scores
