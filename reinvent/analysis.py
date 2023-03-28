@@ -42,7 +42,7 @@ if __name__ == '__main__':
     parser.add_argument("--target", action="store", type=str, default="1OYT", help="Protein target, defaults 1OYT.")
     
     FLAGS = parser.parse_args()
-    assert FLAGS.target in ['4LDE', '1OYT', '1SYH'], 'Invalid protein target'
+    assert FLAGS.target in ['6Y2F', '1OYT', '1SYH'], 'Invalid protein target'
 
     # results = {'generation': [], 'fitness': [], 'run_type': [], 'smiles': []}
     results = []

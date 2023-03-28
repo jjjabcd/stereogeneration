@@ -112,7 +112,7 @@ def substructure_violations(mol):
     # perform filter for non-charged
     forbidden_fragments = [
         '*1=**=*1', '*=*1*=***=*1', '[PH]', '[pH]', '[N&X5]', '[S&X4]',
-        '[S&X5]', '[S&X6]', '[N,n,O,o,S,s]~[F,Cl,Br,I]', 
+        '[S&X5]', '[S&X6]', '[N,n,O,o,S,s]~[F,Cl,Br,I]', '[PH2]', '[N+0]=[O+0]'
         '*=*=*', '*#*', '[O,o]~[O,o]', '[O,o,S,s]!=[O,o,S,s]!=[O,o,S,s]', 
         '[O,o,S,s]~[O,o,S,s]~[C,c]=,:[O,o,S,s;!R]', 
         '[N;R]-[N;!R]', '[N;R]-[N;R]', '[N]~[N]~[N]', '[*+]', '[*-]', '[N]-[N]'
