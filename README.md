@@ -6,6 +6,17 @@ Benchmarks:
 - Docking score
 - CD Spectra
 
+## Preliminaries
+
+Be sure to allow binaries to be executable. This includes
+```bash
+stereogeneration/docking/smina.static
+~/bin/stda/g_spec
+~/bin/stda/stda_v1.6.3
+~/bin/stda/xtb4stda
+```
+otherwise there will be errors in using cd and docking fitnesses.
+
 ## Using the models
 
 Virutal environment used created using 

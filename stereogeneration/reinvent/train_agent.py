@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader
 
 import time
 import os
@@ -23,14 +24,6 @@ from ..utils import sanitize_smiles, assign_stereo
 from ..filter import passes_filter
 
 
-def normalize_score(score, r=[-2.0, 15.0], threshold = 0.95):
-    # arbitrary range of scores given in range
-    centre = r[0] + (r[1] - r[0])/2.0
-    slope = (- 1.0 / (r[1] - centre))*np.log(2.0 / (threshold + 1.0) - 1.0)
-    score = np.array(score)
-    scaled_score = 2.0 / (1.0 + np.exp(-slope*(score - centre))) - 1.0
-    return scaled_score
-
 def padded_concat(arrays, pad_val = 0, max_length = 140):
     # pad_len = max(len(s) for s in arrays)
     padded = []
@@ -42,11 +35,15 @@ def train_agent(scoring_function,
                 restore_prior_from,
                 restore_agent_from,
                 voc_path,
+                starting_df,
+                starting_size = None,
+                normalize_score = None, 
                 stereo=False,
                 save_dir=None, learning_rate=0.0005,
                 batch_size=64, n_steps=3000,
                 num_workers=1, sigma=80,
                 experience_replay=0,
+                store_path='../data', 
                 **kwargs):
 
     voc = Vocabulary(init_from_file=voc_path)
@@ -72,6 +69,52 @@ def train_agent(scoring_function,
 
     optimizer = torch.optim.Adam(Agent.rnn.parameters(), lr=learning_rate)
 
+    # get some samples and check validity
+    seqs, likelihood, _ = Agent.sample(128)
+    valid = 0
+    for i, seq in enumerate(seqs.detach().cpu().numpy()):
+        smile = voc.decode(seq)
+        if Chem.MolFromSmiles(smile):
+            valid += 1
+    print("\n{:>4.1f}% valid SMILES".format(100 * valid / len(seqs)))
+
+    # start with a first round of trianing from the initial dataset
+    # if starting_size is specified, this is the number of top mols to train with
+    if starting_size is not None:
+        print('Running a training loop on the given starting population...')
+        moldata = MolData(starting_df, voc)
+
+        moldata.sort()      # sort based on the best fitnesses
+        train_set = torch.utils.data.Subset(moldata, range(0, starting_size))
+        train_data = DataLoader(train_set, batch_size=128, shuffle=True, collate_fn=MolData.collate_fn)
+        
+        for (batch, y) in train_data:
+            seq = batch.long()
+            agent_likelihood, _ = Agent.likelihood(seq)
+            prior_likelihood, _ = Prior.likelihood(seq)
+
+            # scale the score in the same way
+            score = normalize_score(y.cpu().numpy()) if normalize_score is not None else y
+
+            augmented_likelihood = prior_likelihood + sigma * Variable(score)
+            loss = torch.pow((augmented_likelihood - agent_likelihood), 2).mean()
+
+            loss_p = - (1.0 / agent_likelihood).mean()
+            loss += 5 * 1e3 * loss_p
+
+            torch.nn.utils.clip_grad_norm_(Agent.rnn.parameters(), 3.0)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        seqs, likelihood, _ = Agent.sample(128)
+        valid = 0
+        for i, seq in enumerate(seqs.detach().cpu().numpy()):
+            smile = voc.decode(seq)
+            if Chem.MolFromSmiles(smile):
+                valid += 1
+        print("\n{:>4.1f}% valid SMILES".format(100 * valid / len(seqs)))
+
     # For policy based RL, we normally train on-policy and correct for the fact that more likely actions
     # occur more often (which means the agent can get biased towards them). Using experience replay is
     # therefor not as theoretically sound as it is for value based RL, but it seems to work well.
@@ -86,30 +129,30 @@ def train_agent(scoring_function,
     for step in range(n_steps):
 
         # Current generation
-        collector = {
-            'smiles': [], 
-            'fitness': [], 
-            'score': [], 
-            'generation': [],
-        }
+        collector = {'smiles': [], 'fitness': [], 'score': [], 'generation': []}
         
-        # Sampling procedure (use no_grad to save memory and speed)
+        # Sampling procedure (use no_grad to save memory and speed up)
         # smiles, sequences = [], []
         temp = 1.0
         with torch.no_grad():
             seqs, _, _ = Agent.sample(batch_size, temp=temp)
+
+            # Remove duplicates, ie only consider unique seqs
+            unique_idxs = unique(seqs)
+            seqs = seqs[unique_idxs]
+
+            # apply filter to the smiles
+            # assign stereochemistry to smiles
             seqs = seqs.cpu()
             sampled_smiles = seq_to_smiles(seqs, voc)
-
             valid_smiles, valid_sequences = [], []
             invalid_smiles, invalid_sequences = [], []
+            copy_results = {k: [] for k in results['smiles']}
             for smi, seq in zip(sampled_smiles, seqs):
                 cleaned_smi = sanitize_smiles(smi)
-
-                # valid
                 if cleaned_smi is not None and passes_filter(cleaned_smi):
                     if stereo:
-                        stereo_smi = assign_stereo(cleaned_smi, results['smiles'])
+                        stereo_smi = assign_stereo(cleaned_smi, copy_results)
                         stereo_seq = voc.encode(voc.tokenize(stereo_smi))
                         if stereo_seq is not None:
                             stereo_seq = stereo_seq.astype(int)
@@ -149,7 +192,7 @@ def train_agent(scoring_function,
         fitness = valid_fitness + invalid_fitness
 
         # normalize for the scaled score
-        score = normalize_score(fitness)
+        score = normalize_score(fitness) if normalize_score is not None else np.array(fitness)
 
         # store the information
         collector['smiles'] = smiles
@@ -199,7 +242,7 @@ def train_agent(scoring_function,
         loss += 5 * 1e3 * loss_p
 
         # Calculate gradients and make an update to the network weights
-        torch.nn.utils.clip_grad_norm_(Agent.rnn.parameters(), 3.0)
+        # torch.nn.utils.clip_grad_norm_(Agent.rnn.parameters(), 3.0)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -247,6 +290,7 @@ def train_agent(scoring_function,
     fitness_dict = results[['smiles', 'fitness']].set_index('smiles').transpose().to_dict(orient='records')[0]
     experience.print_memory(os.path.join(save_dir, "memory"), fitness_dict)
     torch.save(Agent.rnn.state_dict(), os.path.join(save_dir, 'Agent.ckpt'))
+
 
 if __name__ == "__main__":
     train_agent()

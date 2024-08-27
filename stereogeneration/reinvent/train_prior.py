@@ -15,25 +15,31 @@ from .reinvent_utils import Variable, decrease_learning_rate
 rdBase.DisableLog('rdApp.error')
 
 
-
-def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data', restore_from=None):
+def pretrain(
+        num_epochs, 
+        verbose, 
+        train_ratio, 
+        starting_df,
+        stereo=False, 
+        store_path='../data', 
+        restore_from=None,
+        use_gpu=True
+    ):
     """Trains the Prior RNN"""
 
     # Initialize early stopper
-    early_stop = EarlyStopping(patience=10, min_delta=1e-7, mode='minimize')
+    early_stop = EarlyStopping(patience=20, min_delta=1e-7, mode='minimize')
 
     # Read vocabulary from a file
     if stereo:
         voc = Vocabulary(init_from_file=f"{store_path}/Voc_stereo")
-        moldata = MolData(f"{store_path}/mols_filtered_stereo.smi", voc)
     else:
         voc = Vocabulary(init_from_file=f"{store_path}/Voc_nonstereo")
-        moldata = MolData(f"{store_path}/mols_filtered_nonstereo.smi", voc)
 
+    moldata = MolData(starting_df, voc)
 
     # Create a Dataset from a SMILES file
     train_size = int(len(moldata)*train_ratio)
-    # train_size = int(100*train_ratio)
     train_set = torch.utils.data.Subset(moldata, range(0, train_size))
     valid_set = torch.utils.data.Subset(moldata, range(train_size, len(moldata)))
 
@@ -41,7 +47,13 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
     train_data = DataLoader(train_set, batch_size=128, shuffle=True, collate_fn=MolData.collate_fn)
     valid_data = DataLoader(valid_set, batch_size=128, collate_fn=MolData.collate_fn)
 
+    if use_gpu:
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    else:
+        device = torch.device('cpu')
+
     Prior = RNN(voc)
+    Prior.rnn = Prior.rnn.to(device)
 
     # Can restore from a saved RNN
     if restore_from:
@@ -54,10 +66,10 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
         # its probably a good idea to check loss against an external set of
         # validation SMILES to make sure we dont overfit too much.
         Prior.rnn.train()
-        for step, batch in tqdm(enumerate(train_data), total=len(train_data), disable=not verbose):
+        for step, (batch, _) in tqdm(enumerate(train_data), total=len(train_data), disable=not verbose):
 
             # Sample from DataLoader
-            seqs = batch.long()
+            seqs = batch.long().to(device)
 
             # Calculate loss
             log_p, _ = Prior.likelihood(seqs)
@@ -68,9 +80,8 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
             loss.backward()
             optimizer.step()
 
-            # Every 500 steps we decrease learning rate and print some information
             if step % 100 == 0 and step != 0:
-                decrease_learning_rate(optimizer, decrease_by=0.003)
+                # decrease_learning_rate(optimizer, decrease_by=0.003)
                 if verbose:
                     tqdm.write("*" * 50)
                     tqdm.write("Epoch {:3d}   step {:3d}    loss: {:5.2f}\n".format(epoch, step, loss.item()))
@@ -78,7 +89,7 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
                     print("Epoch {:3d}   step {:3d}    loss: {:5.2f}\n".format(epoch, step, loss.item()))
                 seqs, likelihood, _ = Prior.sample(128)
                 valid = 0
-                for i, seq in enumerate(seqs.cpu().numpy()):
+                for i, seq in enumerate(seqs.detach().cpu().numpy()):
                     smile = voc.decode(seq)
                     if Chem.MolFromSmiles(smile):
                         valid += 1
@@ -97,7 +108,7 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
         # validation loop
         Prior.rnn.eval()
         val_loss = 0
-        for step, batch in tqdm(enumerate(valid_data), total=len(valid_data), disable=not verbose):
+        for step, (batch, _) in tqdm(enumerate(valid_data), total=len(valid_data), disable=not verbose):
             with torch.no_grad():
                 seqs = batch.long()
                 log_p, _ = Prior.likelihood(seqs)
@@ -111,11 +122,11 @@ def pretrain(num_epochs, verbose, train_ratio, stereo=False, store_path='../data
             Prior.rnn = early_stop.restore_best(Prior.rnn)
             break
 
-        # save checkpoint    
-        if stereo:
-            torch.save(Prior.rnn.state_dict(), f"{store_path}/Prior_checkpoint_stereo.ckpt")
-        else:
-            torch.save(Prior.rnn.state_dict(), f"{store_path}/Prior_checkpoint_nonstereo.ckpt")
+        # # save checkpoint    
+        # if stereo:
+        #     torch.save(Prior.rnn.state_dict(), f"{store_path}/Prior_checkpoint_stereo.ckpt")
+        # else:
+        #     torch.save(Prior.rnn.state_dict(), f"{store_path}/Prior_checkpoint_nonstereo.ckpt")
 
         Prior.rnn.train()
 

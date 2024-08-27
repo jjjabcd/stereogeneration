@@ -17,7 +17,7 @@ from selfies import encoder, decoder
 
 from .utils import get_selfies_chars
 
-def mutate_sf(sf_chars, alphabet, num_sample_frags, base_alphabet = None):
+def mutate_sf(sf_chars, alphabet, num_sample_frags, base_alphabet = None, weights = None):
     """
     Given a list of SELFIES alphabets, make random changes to the molecule using 
     alphabet. Opertations to molecules are character replacements, additions and deletions. 
@@ -41,6 +41,7 @@ def mutate_sf(sf_chars, alphabet, num_sample_frags, base_alphabet = None):
     """
     if base_alphabet is None:
         base_alphabet = list(selfies.get_semantic_robust_alphabet())
+        weights = None
     random_char_idx = random.choice(range(len(sf_chars)))
     choices_ls = [1, 2, 3]  # 1 = replacement; 2 = addition; 3=delete
     mutn_choice = choices_ls[
@@ -48,13 +49,18 @@ def mutate_sf(sf_chars, alphabet, num_sample_frags, base_alphabet = None):
     ]  # Which mutation to do:
 
     if alphabet != []:
-        alphabet = random.sample(alphabet, num_sample_frags) + base_alphabet
+        alphabet = base_alphabet + random.sample(alphabet, num_sample_frags)
     else:
         alphabet = base_alphabet
 
+    if weights is not None:
+        # pad the weights for fragments
+        if len(weights) != len(alphabet):
+            weights += [1.0] * num_sample_frags
+
     # Mutate character:
     if mutn_choice == 1:
-        random_char = alphabet[random.choice(range(len(alphabet)))]
+        random_char = random.choices(alphabet, weights=weights)[0]
         change_sf = (
             sf_chars[0:random_char_idx]
             + [random_char]
@@ -63,7 +69,7 @@ def mutate_sf(sf_chars, alphabet, num_sample_frags, base_alphabet = None):
 
     # add character:
     elif mutn_choice == 2:
-        random_char = alphabet[random.choice(range(len(alphabet)))]
+        random_char = random.choices(alphabet, weights=weights)[0]
         change_sf = (
             sf_chars[0:random_char_idx] + [random_char] + sf_chars[random_char_idx:]
         )
@@ -79,7 +85,14 @@ def mutate_sf(sf_chars, alphabet, num_sample_frags, base_alphabet = None):
 
 
 def mutate_smiles(
-    smile, alphabet, num_random_samples, num_mutations, num_sample_frags, base_alphabet = None, stereo=True
+    smile, 
+    alphabet, 
+    num_random_samples, 
+    num_mutations, 
+    num_sample_frags, 
+    base_alphabet = None,
+    alphabet_weights = None,
+    stereo=True
 ):
     """
     Given an input smile, perform mutations to the strucutre using provided SELFIE
@@ -130,11 +143,11 @@ def mutate_smiles(
         mutated_sf = []
         for i in range(num_mutations):
             if i == 0:
-                mutated_sf.append(mutate_sf(selfies_ls_chars, alphabet, num_sample_frags, base_alphabet))
+                mutated_sf.append(mutate_sf(selfies_ls_chars, alphabet, num_sample_frags, base_alphabet, alphabet_weights))
             else:
                 mutated_sf.append(
                     mutate_sf(
-                        get_selfies_chars(mutated_sf[-1]), alphabet, num_sample_frags, base_alphabet
+                        get_selfies_chars(mutated_sf[-1]), alphabet, num_sample_frags, base_alphabet, alphabet_weights
                     )
                 )
         

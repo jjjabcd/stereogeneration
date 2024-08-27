@@ -7,6 +7,7 @@ import sys
 import time
 import torch
 from torch.utils.data import Dataset
+import pandas as pd
 
 from .reinvent_utils import Variable
 
@@ -92,33 +93,40 @@ class MolData(Dataset):
         Returns:
                 A custom PyTorch dataset for training the Prior.
     """
-    def __init__(self, fname, voc):
+    def __init__(self, df, voc):
         self.voc = voc
-        self.smiles = []
-        with open(fname, 'r') as f:
-            for line in f:
-                self.smiles.append(line.split()[0])
+        self.smiles = df['smiles'].tolist()
+        self.fitness = df['fitness'].tolist()
+
+    def sort(self):
+        # sort everything from highest to lowest targets
+        sort_idx = np.argsort(self.fitness)[::-1]
+        self.smiles = np.array(self.smiles)[sort_idx].tolist()
+        self.fitness = np.array(self.fitness)[sort_idx].tolist()
 
     def __getitem__(self, i):
         mol = self.smiles[i]
         tokenized = self.voc.tokenize(mol)
         encoded = self.voc.encode(tokenized)
-        return Variable(encoded)
+        return Variable(encoded), Variable(np.array([self.fitness[i]]))
 
     def __len__(self):
         return len(self.smiles)
 
     def __str__(self):
         return "Dataset containing {} structures.".format(len(self))
-
+    
     @classmethod
     def collate_fn(cls, arr):
         """Function to take a list of encoded sequences and turn them into a batch"""
-        max_length = max([seq.size(0) for seq in arr])
+        max_length = max([seq.size(0) for seq, _ in arr])
         collated_arr = Variable(torch.zeros(len(arr), max_length))
-        for i, seq in enumerate(arr):
+        collated_fitness = Variable(torch.zeros(len(arr)))
+        for i, (seq, fitness) in enumerate(arr):
             collated_arr[i, :seq.size(0)] = seq
-        return collated_arr
+            collated_fitness[i] = fitness
+        return collated_arr, collated_fitness
+    
 
 class Experience(object):
     """Class for prioritized experience replay that remembers the highest scored sequences

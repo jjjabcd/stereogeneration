@@ -37,11 +37,11 @@ def fitness_function(smi: str, target: str = '1SYH', seed: int =30624700):
         ensemble_p.prune_rmsd()
         ensemble_p.sort()   
         ensemble_p[0:1].write_xyz(f'{name}.xyz')
-        _ = subprocess.run(f'obabel -ixyz {str(name)}.xyz -O {name}.pdb --best', shell=True, capture_output=True)
+        subprocess.run(f'obabel -ixyz {str(name)}.xyz -O {name}.pdb --best', shell=True, capture_output=True)
     except:
         # generate ligand files directly from smiles using openbabel
         print(f'Default to openbabel embedding... for : {smi}')
-        _ = subprocess.run(f'obabel -:"{smi}" --gen3d -h -O {name}.pdb --best', shell=True, capture_output=True)
+        subprocess.run(f'obabel -:"{smi}" --gen3d -h -O {name}.pdb --best', shell=True, capture_output=True)
 
     # get the stereosmiles decided by embedding procedure
     try: 

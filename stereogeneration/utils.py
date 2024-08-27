@@ -84,33 +84,45 @@ def scramble_stereo(smi):
     return smi_list
         
 
-def assign_stereo(smi, collector=[]):
+def assign_stereo(smi, collector={}, random_stereo=True):
     ''' Assign stereochemistry to smiles randomly.
     Return the same smile if invalid.
     Check that smiles is not already found in collector.
     '''
-    
     # pick an assigned stereosmiles (if more than one)
     mol = Chem.MolFromSmiles(smi)
     if mol is None:
         return smi
+    
+    # assign isomers
     opt = StereoEnumerationOptions(unique=True, onlyUnassigned=True)
     isomers = list(EnumerateStereoisomers(mol, options=opt))
+    isomers = remove_specified_chiral_centres(isomers)      # remove nitrogen chiral centres
 
-    # remove nitrogen chiral centres
-    isomers = remove_specified_chiral_centres(isomers)
+    # other isomers 
+    opt = StereoEnumerationOptions(unique=True, onlyUnassigned=False)
+    other_isomers = list(EnumerateStereoisomers(mol, options=opt))
+    other_isomers = remove_specified_chiral_centres(other_isomers)      # remove nitrogen chiral centres
 
     # return isomer that is not yet observed
-    if len(isomers) > 1:
-        random.shuffle(isomers)     # random selecting
-        for i in range(len(isomers)):
-            smi = Chem.MolToSmiles(isomers[i], isomericSmiles=True, canonical=True)
+    if len(isomers) >= 1:
+        if random_stereo: random.shuffle(isomers)     # random selecting
+        for i in isomers:
+            smi = Chem.MolToSmiles(i, isomericSmiles=True, canonical=True)
             if smi not in collector:
+                collector[smi] = []
                 return smi #, True
-        return smi #, False      # if all are observed, return anyway
-    else:
-        # if none are found, return original smiles
-        return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True) #, False
+        
+    if len(other_isomers) > 1:
+        if random_stereo: random.shuffle(other_isomers)
+        for i in other_isomers:
+            smi = Chem.MolToSmiles(i, isomericSmiles=True, canonical=True)
+            if smi not in collector:
+                collector[smi] = []
+                return smi #, True
+            
+    # if none are found, return original smiles
+    return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True) #, False
 
 
 
@@ -213,4 +225,28 @@ def from_yaml(work_dir,
 
     return params
 
+def scale_array(arr):
+    # Get the minimum and maximum values of the array
+    arr_min = np.min(arr)
+    arr_max = np.max(arr)
 
+    # If all values are the same, return an array of zeros
+    if arr_min == arr_max:
+        return np.zeros_like(arr)
+
+    # Scale the array to the range [0, 1]
+    scaled_arr = (arr - arr_min) / (arr_max - arr_min)
+    return scaled_arr
+
+
+def normalize_score(score, r=[6.0, 15.0], threshold = 0.95):
+    # arbitrary range of scores given in range to [0, 1]
+    # general values for dataset
+    # max(1oyt) = 11.9
+    # max(1syh) = 11.1
+    # max(6y2f) = 9.3
+    centre = r[0] + (r[1] - r[0])/2.0
+    slope = (- 1.0 / (r[1] - centre))*np.log(1.0/threshold - 1.0)
+    score = np.array(score)
+    scaled_score = 1.0 / (1.0 + np.exp(-slope*(score - centre))) # - 1.0
+    return scaled_score

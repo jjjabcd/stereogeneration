@@ -29,6 +29,7 @@ class JANUS:
         verbose_out: Optional[bool] = False,
         custom_filter: Optional[Callable] = None,
         alphabet: Optional[List[str]] = None,
+        alphabet_weights: Optional[List[float]] = None,
         use_gpu: Optional[bool] = True,
         num_workers: Optional[int] = None,
         generations: Optional[int] = 200,
@@ -44,7 +45,8 @@ class JANUS:
         exploit_num_mutations: Optional[int] = 400,
         top_mols: Optional[int] = 1,
         stereo: bool = True,
-        starting_fitness = None
+        starting_fitness = None,
+        use_diverse_topk = True,
     ):
 
         # set all class variables
@@ -54,6 +56,7 @@ class JANUS:
         self.verbose_out = verbose_out
         self.custom_filter = custom_filter
         self.alphabet = alphabet
+        self.alphabet_weights = alphabet_weights
         self.use_gpu = use_gpu
         self.num_workers = num_workers if num_workers is not None else multiprocessing.cpu_count()
         self.generations = generations
@@ -69,6 +72,7 @@ class JANUS:
         self.exploit_num_mutations = exploit_num_mutations
         self.top_mols = top_mols
         self.stereo = stereo
+        self.use_diverse_topk = use_diverse_topk
 
         # create dump folder
         if not os.path.isdir(f"./{self.work_dir}"):
@@ -91,6 +95,10 @@ class JANUS:
         assert (
             self.top_mols <= self.generation_size
         ), "Number of top molecules larger than generation size."
+        if self.num_exchanges > 0.1*self.generation_size:
+            print('Parameter num_exchanges is greater than 0.1 of generation size. \
+                  You may exchange too many molecules after each generation.')
+            
 
         # make fragments from initial smiles
         self.frag_alphabet = []
@@ -101,7 +109,6 @@ class JANUS:
                     expanded_smi.extend(scramble_stereo(smi))
             else:
                 expanded_smi = init_smiles
-            # expanded_smi = init_smiles
                 
             with multiprocessing.Pool(self.num_workers) as pool:
                 frags = pool.map(
@@ -166,6 +173,7 @@ class JANUS:
                     num_mutations=num_mutations,
                     num_sample_frags=self.num_sample_frags,
                     base_alphabet=self.alphabet,
+                    alphabet_weights=self.alphabet_weights,
                     stereo=self.stereo
                 ),
                 smi_list,
@@ -220,13 +228,16 @@ class JANUS:
         """ Run optimization based on hyperparameters initialized
         """
 
-        for gen_ in range(self.generations):
+        # create some file with headers for output
+        for fname in [
+            'exploration_results.csv',
+            'exploitation_results.csv',
+            'generation_all_best.csv'
+        ]:
+            with open(os.path.join(self.work_dir, fname), 'a+') as f:
+                f.writelines([f"generation,smiles,fitness\n"])
 
-            # bookkeeping
-            if self.verbose_out:
-                output_dir = os.path.join(self.work_dir, f"{gen_}_DATA")
-                if not os.path.isdir(output_dir):
-                    os.mkdir(output_dir)
+        for gen_ in range(self.generations):
 
             print(f"On generation {gen_}/{self.generations}")
 
@@ -257,16 +268,16 @@ class JANUS:
 
                 # Combine and get unique smiles not yet found
                 all_smiles = list(set(mut_smi_explr + cross_smi_explr))
+                copy_collector = self.smiles_collector.copy()
                 for x in all_smiles:
-                    if self.stereo:
-                        smi = assign_stereo(x, self.smiles_collector)
-                    else:
-                        smi = x
+                    smi = assign_stereo(x, copy_collector) if self.stereo else x
                     if smi not in self.smiles_collector:
                         explr_smiles.append(smi)
-                explr_smiles = list(set(explr_smiles))
+                # explr_smiles = list(set(explr_smiles))
 
-                print(f'Explore: {timeout_counter}    Len of unique smiles: {len(explr_smiles)}')
+                # print(f'Explore: {timeout_counter}    Len of unique smiles: {len(explr_smiles)}')
+                print(f'Explore: {timeout_counter}    Len of smiles: {len(explr_smiles)}')
+                print(f'\t\t Number of uniques {len(list(set(explr_smiles)))}')
 
                 timeout_counter += 1
                 if timeout_counter % 50 == 0:
@@ -318,7 +329,10 @@ class JANUS:
             new_fitness = self.measure_smi_list(replaced_pop)
             self.fitness.extend(new_fitness)
             for smi, f in zip(replaced_pop, new_fitness):
-                self.smiles_collector[smi] = [f, 1]
+                if smi in self.smiles_collector:
+                    self.smiles_collector[smi][1] += 1
+                else:
+                    self.smiles_collector[smi] = [f, 1]
 
             # Print exploration data
             idx_sort = np.argsort(self.fitness)[::-1]
@@ -326,61 +340,41 @@ class JANUS:
             print(f"    (Explr) Top Smile: {self.population[idx_sort[0]]}")
 
             fitness_sort = np.array(self.fitness)[idx_sort]
-            if self.verbose_out:
-                with open(
-                    os.path.join(
-                        self.work_dir, str(gen_) + "_DATA", "fitness_explore.txt"
-                    ),
-                    "w",
-                ) as f:
-                    f.writelines(["{} ".format(x) for x in fitness_sort])
-                    f.writelines(["\n"])
-            else:
-                with open(os.path.join(self.work_dir, "fitness_explore.txt"), "w") as f:
-                    f.writelines(["{} ".format(x) for x in fitness_sort])
-                    f.writelines(["\n"])
-
-            # this population is sort by modified fitness, if active
             population_sort = np.array(self.population)[idx_sort]
+
             if self.verbose_out:
-                with open(
-                    os.path.join(
-                        self.work_dir, str(gen_) + "_DATA", "population_explore.txt"
-                    ),
-                    "w",
-                ) as f:
-                    f.writelines(["{} ".format(x) for x in population_sort])
-                    f.writelines(["\n"])
+                with open(os.path.join(self.work_dir, 'exploration_results.csv'), 'a+') as f:
+                    f.writelines([f"{gen_},{smi_in_pop},{fit_in_pop}\n" for smi_in_pop, fit_in_pop in zip(population_sort, fitness_sort)])
             else:
-                with open(
-                    os.path.join(self.work_dir, "population_explore.txt"), "w"
-                ) as f:
-                    f.writelines(["{} ".format(x) for x in population_sort])
-                    f.writelines(["\n"])
+                with open(os.path.join(self.work_dir, 'final_exploration_results.csv'), 'w') as f:
+                    f.writelines(
+                        ['generation,smiles,fitness\n'] +
+                        [f"{gen_},{smi_in_pop},{fit_in_pop}\n" for smi_in_pop, fit_in_pop in zip(population_sort, fitness_sort)]
+                    )
 
             ### EXPLOITATION ###
             # Conduct local search on top-n molecules from population, mutate and do similarity search
             exploit_smiles = []
             timeout_counter = 0
             while len(exploit_smiles) < self.generation_size:
-                smiles_local_search = population_sort[0 : self.top_mols].tolist()
+                # smiles_local_search = population_sort[0 : self.top_mols].tolist()
+                smiles_local_search = self.get_diverse_topk(population_sort) if self.use_diverse_topk else population_sort[0:self.top_mols].tolist()
                 mut_smi_loc = self.mutate_smi_list(smiles_local_search, "local")
                 mut_smi_loc = self.neutralize_radicals(mut_smi_loc)
                 mut_smi_loc = self.check_filters(mut_smi_loc)
 
                 # filter out molecules already found
-                mut_smi_loc = list(set(mut_smi_loc))
+                # mut_smi_loc = list(set(mut_smi_loc))
+                copy_collector = self.smiles_collector.copy()
                 for x in mut_smi_loc:
-                    if self.stereo:
-                        smi = assign_stereo(x, self.smiles_collector)
-                    else:
-                        smi = x
+                    smi = assign_stereo(x, copy_collector) if self.stereo else x
                     if smi not in self.smiles_collector:
-                        exploit_smiles.append(x)
-                exploit_smiles = list(set(exploit_smiles))
+                        exploit_smiles.append(smi)
+                # exploit_smiles = list(set(exploit_smiles))
 
-                timeout_counter += 1
                 print(f'Exploit: {timeout_counter}    Len of unique smiles: {len(exploit_smiles)}')
+                print(f'\t\t Number of uniques {len(list(set(exploit_smiles)))}')
+                timeout_counter += 1
                 if timeout_counter % 50 == 0:
                     print(f'Exploitation: {timeout_counter} iterations of filtering. \
                     Filter may be too strict, or you need more mutations/crossovers.')
@@ -391,7 +385,7 @@ class JANUS:
             # highest fp_score idxs
             self.population_loc = np.array(exploit_smiles)[
                 fp_sort_idx
-            ]  # list of smiles with highest fp scores
+            ]  # list of smiles with highest fp scores (most to least similar)
 
             # STEP 4: CALCULATE THE FITNESS FOR THE LOCAL SEARCH:
             # Exploitation data generated from similarity search is measured with fitness function
@@ -399,7 +393,10 @@ class JANUS:
             # calculate new fitnesses
             self.fitness_loc = self.measure_smi_list(self.population_loc)
             for smi, f in zip(self.population_loc, self.fitness_loc):
-                self.smiles_collector[smi] = [f, 1]
+                if smi in self.smiles_collector:
+                    self.smiles_collector[smi][1] += 1
+                else:
+                    self.smiles_collector[smi] = [f, 1]
 
 
             # List of original local fitness scores
@@ -410,40 +407,17 @@ class JANUS:
             print(f"    (Local) Top Smile: {self.population_loc[idx_sort[0]]}")
 
             fitness_sort = np.array(self.fitness_loc)[idx_sort]
-            if self.verbose_out:
-                with open(
-                    os.path.join(
-                        self.work_dir, str(gen_) + "_DATA", "fitness_local_search.txt"
-                    ),
-                    "w",
-                ) as f:
-                    f.writelines(["{} ".format(x) for x in fitness_sort])
-                    f.writelines(["\n"])
-            else:
-                with open(
-                    os.path.join(self.work_dir, "fitness_local_search.txt"), "w"
-                ) as f:
-                    f.writelines(["{} ".format(x) for x in fitness_sort])
-                    f.writelines(["\n"])
-
             population_sort = np.array(self.population_loc)[idx_sort]
+
             if self.verbose_out:
-                with open(
-                    os.path.join(
-                        self.work_dir,
-                        str(gen_) + "_DATA",
-                        "population_local_search.txt",
-                    ),
-                    "w",
-                ) as f:
-                    f.writelines(["{} ".format(x) for x in population_sort])
-                    f.writelines(["\n"])
+                with open(os.path.join(self.work_dir, 'exploitation_results.csv'), 'a+') as f:
+                    f.writelines([f"{gen_},{smi_in_pop},{fit_in_pop}\n" for smi_in_pop, fit_in_pop in zip(population_sort, fitness_sort)])
             else:
-                with open(
-                    os.path.join(self.work_dir, "population_local_search.txt"), "w"
-                ) as f:
-                    f.writelines(["{} ".format(x) for x in population_sort])
-                    f.writelines(["\n"])
+                with open(os.path.join(self.work_dir, 'final_exploitation_results.csv'), 'w') as f:
+                    f.writelines(
+                        ['generation,smiles,fitness\n'] +
+                        [f"{gen_},{smi_in_pop},{fit_in_pop}\n" for smi_in_pop, fit_in_pop in zip(population_sort, fitness_sort)]
+                    )
 
             # STEP 5: EXCHANGE THE POPULATIONS:
             # Introduce changes to 'fitness' & 'population'
@@ -458,24 +432,41 @@ class JANUS:
                 -self.num_exchanges :
             ]  # replace worst ones with the best ones
             for i, idx in enumerate(worst_indices):
-                try:
-                    self.population[idx] = best_smi_local[i]
-                    self.fitness[idx] = best_fitness_local[i]
-                except:
-                    continue
+                self.population[idx] = best_smi_local[i]
+                self.fitness[idx] = best_fitness_local[i]
 
             # Save best of generation!:
             fit_all_best = np.argmax(self.fitness)
 
             # write best molecule with best fitness
-            with open(
-                os.path.join(self.work_dir, "generation_all_best.txt"), "a+"
-            ) as f:
+            with open(os.path.join(self.work_dir, "generation_all_best.csv"), "a+") as f:
                 f.writelines(
-                    f"Gen:{gen_}, {self.population[fit_all_best]}, {self.fitness[fit_all_best]} \n"
+                    f"{gen_},{self.population[fit_all_best]},{self.fitness[fit_all_best]}\n"
                 )
 
-        return
+    def get_diverse_topk(self, smi_list, sim_thresh=0.15):
+        # function will return diverse set of top molecules
+        # smi_list and fitness_list should be sorted by fitness largest -> smallest
+        top_smis = smi_list[:self.top_mols]
+
+        smi_list = np.array(smi_list)
+        diverse_topk = []
+        while len(diverse_topk) < self.top_mols:
+            diverse_topk.append(smi_list[0])                            # add the top fitness
+            scores = np.array(get_fp_scores(smi_list, smi_list[0]))     # get similarity scores
+
+            smi_list = smi_list[scores < sim_thresh]       # remove the highest sim, also removes the top1
+            if len(smi_list) < self.top_mols:
+                print('Molecules in the list of smiles are too similar to find diverse topk.')
+                return top_smis
+        
+        # if top_smis == diverse_topk:
+        #     print('Diverse topk is the same as topk smiles.')
+        # print(top_smis)
+        # print(diverse_topk)
+
+        return diverse_topk
+        
 
     @staticmethod
     def get_good_bad_smiles(fitness, population, generation_size):
@@ -538,8 +529,6 @@ class JANUS:
 
         return keep_smiles, replace_smiles
 
-    def log(self):
-        pass
 
     @staticmethod
     def flatten_list(nested_list):
