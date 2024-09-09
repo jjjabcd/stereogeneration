@@ -145,8 +145,8 @@ def train_agent(scoring_function,
             # assign stereochemistry to smiles
             seqs = seqs.cpu()
             sampled_smiles = seq_to_smiles(seqs, voc)
-            valid_smiles, valid_sequences = [], []
-            invalid_smiles, invalid_sequences = [], []
+            valid_smiles, observed_smiles, invalid_smiles = [], [], []
+            valid_sequences, observed_sequences, invalid_sequences = [], [], []
             copy_results = {k: [] for k in results['smiles']}
             for smi, seq in zip(sampled_smiles, seqs):
                 cleaned_smi = sanitize_smiles(smi)
@@ -156,29 +156,42 @@ def train_agent(scoring_function,
                         stereo_seq = voc.encode(voc.tokenize(stereo_smi))
                         if stereo_seq is not None:
                             stereo_seq = stereo_seq.astype(int)
-                            valid_smiles.append(stereo_smi)
-                            valid_sequences.append(stereo_seq)
+                            if stereo_smi in results['smiles']:     # we have seen this before
+                                observed_smiles.append(stereo_smi)
+                                observed_sequences.append(stereo_seq)
+                            else:                                   # this is new, make measurement
+                                valid_smiles.append(stereo_smi)
+                                valid_sequences.append(stereo_seq)
                         else:
                             invalid_smiles.append(smi)
                             invalid_sequences.append(seq)
                     else:
-                        valid_smiles.append(smi)
-                        valid_sequences.append(seq)
-                # invalid
-                else:
+                        cleaned_seq = voc.encode(voc.tokenize(cleaned_smi))
+                        if cleaned_seq is not None:
+                            cleaned_seq = cleaned_seq.astype(int)
+                            if cleaned_smi in results['smiles']:        # we have seen this before
+                                observed_smiles.append(cleaned_smi)
+                                observed_sequences.append(cleaned_seq)
+                            else:                                       # this is new, make measurement
+                                valid_smiles.append(cleaned_smi)
+                                valid_sequences.append(cleaned_seq)
+                        else:
+                            invalid_smiles.append(smi)
+                            invalid_sequences.append(seq)
+                else:                                               # invalid
                     invalid_smiles.append(smi)
                     invalid_sequences.append(seq)
 
-        sequences = valid_sequences + invalid_sequences
-        pad_len = max([len(s) for s in sequences])
-        sequences = padded_concat(sequences, max_length=pad_len)
 
         # calculate likelihoods from the generated sequences
         # while smiles may be invalid, the sequences are still valid 
-        # these jobs will fail, and be scored -1
-        # sequences = np.concatenate(sequences, axis=0)
-        num_val = len(valid_smiles)
-        smiles = valid_smiles + invalid_smiles
+        # these jobs will fail, and be scored 0
+        num_val = len(valid_smiles + observed_smiles)
+        smiles = valid_smiles + observed_smiles + invalid_smiles
+
+        sequences = valid_sequences + observed_sequences + invalid_sequences
+        pad_len = max([len(s) for s in sequences])
+        sequences = padded_concat(sequences, max_length=pad_len)
 
         sequences = Variable(sequences)
         agent_likelihood, _ = Agent.likelihood(sequences)
@@ -188,8 +201,9 @@ def train_agent(scoring_function,
         print(f'Total of {num_val}/{batch_size} passed the filter.')
         with multiprocessing.Pool(num_workers) as pool:
             valid_fitness = pool.map(scoring_function, valid_smiles)
+        observed_fitness = [results.drop_duplicates('smiles').set_index('smiles')['fitness'].loc[smi] for smi in observed_smiles]
         invalid_fitness = [-200.]*len(invalid_smiles)
-        fitness = valid_fitness + invalid_fitness
+        fitness = valid_fitness + observed_fitness + invalid_fitness
 
         # normalize for the scaled score
         score = normalize_score(fitness) if normalize_score is not None else np.array(fitness)
@@ -201,12 +215,13 @@ def train_agent(scoring_function,
         collector['score'] = score.tolist()
         collector = pd.DataFrame(collector)
 
+        # update the results df
         results = pd.concat([results, collector])
 
+        # get some statistics on the best found
         best = collector.nlargest(1, 'fitness')
         best_fitness = best['fitness'].values[0]
         best_smiles = best['smiles'].values[0]
-
         best = results.nlargest(1, 'fitness')
         best_fitness_all = best['fitness'].values[0]
         best_smiles_all = best['smiles'].values[0]

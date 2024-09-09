@@ -43,9 +43,9 @@ parser.add_argument('--num_workers', action='store', dest='num_workers',
 # parser.add_argument('--agent', action='store', dest='restore_agent_from',
 #                     default='data/Prior.ckpt',
 #                     help='Path to an RNN checkpoint file to use as a Agent.')
-parser.add_argument('--lower_bound', action='store', dest='lower_bound', type=int, default=3,
+parser.add_argument('--lower_bound', action='store', dest='lower_bound', type=int, default=2,
                     help='Lower bound for score normalization.')
-parser.add_argument('--upper_bound', action='store', dest='upper_bound', type=int, default=13,
+parser.add_argument('--upper_bound', action='store', dest='upper_bound', type=int, default=14,
                     help='Upper bound for score normalization.')
 parser.add_argument("--stereo", action="store_true", dest="stereo", 
                     help="Toggle stereogeneration, defaults false.", default=False)
@@ -76,14 +76,13 @@ if __name__ == "__main__":
         norm_func = lambda x: normalize_score(x, r=[FLAGS.lower_bound, FLAGS.upper_bound])
     elif FLAGS.target == 'cd':
         tar_func = cd.fitness_function
-        norm_func = lambda x: normalize_score(x, r=[-5000, 5000])
+        norm_func = lambda x: normalize_score(x, r=[0, 7000])
     else:
         tar_func = partial(fingerprint.fitness_function, target=FLAGS.target)
         # norm_func = lambda x: np.multiply(2.0, np.maximum(x, -1.)) - 1.0
         k = 1.0
         norm_func = lambda x: np.minimum(np.maximum(x, 0.0), k) / k
     tar_func.__name__ = f'{FLAGS.target}_score'
-
 
     # read the dataset
     df = pd.read_csv(f'../../zinc.csv')

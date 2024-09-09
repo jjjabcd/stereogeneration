@@ -11,12 +11,13 @@ import pandas as pd
 import rdkit.Chem as Chem
 from morfeus.conformer import ConformerEnsemble
 
+from .utils import assign_stereo
 from functools import partial
 import subprocess
 from argparse import ArgumentParser
 
-def fitness_function(smi: str, target: str = '1SYH', seed: int =30624700):
-    ''' Docking score (maximize) for given target protein. Scored my SMINA.
+def fitness_function(smi: str, target: str = '1SYH', seed: int = 30624700):
+    ''' Docking score (maximize) for given target protein. Scored by SMINA.
     Select from available protein targets: 1OYT, 1SYH, 4LDE, and 6Y2F
     '''
 
@@ -30,12 +31,15 @@ def fitness_function(smi: str, target: str = '1SYH', seed: int =30624700):
     name = 'mol'
     t0 = time.time()
 
+    # assign stereo
+    smi = assign_stereo(smi, {})
+
     # do conformer search using morfeus
     # both embedding methods give deterministic stereochemistry
     try:
-        ensemble_p = ConformerEnsemble.from_rdkit(smi, optimize="MMFF94") #, random_seed=seed)
+        ensemble_p = ConformerEnsemble.from_rdkit(smi, optimize="MMFF94")  # will also assign the stereochemistry randomly
         ensemble_p.prune_rmsd()
-        ensemble_p.sort()   
+        ensemble_p.sort()
         ensemble_p[0:1].write_xyz(f'{name}.xyz')
         subprocess.run(f'obabel -ixyz {str(name)}.xyz -O {name}.pdb --best', shell=True, capture_output=True)
     except:

@@ -129,11 +129,15 @@ class GroupJANUS:
             # generate fragment groups 
             fragments = fragment_mols(expanded_smi, convert=True, method='default', target=100)  
             vocab_frags = dict([(f'frag{idx}', Group(f'frag{idx}', frag)) for idx, frag in enumerate(fragments)])
-            self.group_grammar = self.group_grammar | GroupGrammar(vocab = vocab_frags)
-            frag_tokens = GroupGrammar(vocab = vocab_frags).all_tokens()
+            self.fragment_grammar = GroupGrammar(vocab = vocab_frags)
+            
+            # put all the tokens into the fragment alphabet (used in mutations)
+            frag_tokens = self.fragment_grammar.all_tokens()
             print(f"    Unique and valid fragments generated: {len(vocab_frags)}")
             print(f"    Unique group-selfies tokens: {len(frag_tokens)}")
             self.frag_alphabet.extend(frag_tokens)
+        else:
+            self.fragment_grammar = GroupGrammar()
 
 
         # get initial fitness
@@ -181,10 +185,12 @@ class GroupJANUS:
         global decode_func
 
         def encode_func(mol):
-            return self.group_grammar.full_encoder(mol)
+            gram = self.group_grammar | self.fragment_grammar
+            return gram.full_encoder(mol)
         
         def decode_func(gselfies):
-            return self.group_grammar.decoder(gselfies)  
+            gram = self.group_grammar | self.fragment_grammar
+            return gram.decoder(gselfies)  
     
         with multiprocessing.Pool(self.num_workers) as pool:
             mut_smi_list = pool.map(
@@ -396,7 +402,7 @@ class GroupJANUS:
             while len(exploit_smiles) < self.generation_size:
                 # smiles_local_search = population_sort[0 : self.top_mols].tolist()
                 smiles_local_search = self.get_diverse_topk(population_sort) if self.use_diverse_topk else population_sort[0:self.top_mols].tolist()
-                mut_smi_loc = self.mutate_smi_list(smiles_local_search, "local")
+                mut_smi_loc = self.mutate_smi_list(smiles_local_search, space="local")
                 mut_smi_loc = self.neutralize_radicals(mut_smi_loc)
                 mut_smi_loc = self.check_filters(mut_smi_loc)
 

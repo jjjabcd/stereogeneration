@@ -45,7 +45,7 @@ def get_chiral_fp_score(smi, target_smi):
 
 def fitness_function(smi, target):
     target_smi = TAR_MAP[target]
-    chiral_smi = assign_stereo(smi)        # this only returns smiles with chirality (fills in unassigned)
+    chiral_smi = assign_stereo(smi, {})        # this only returns smiles with chirality (fills in unassigned)
 
     try:
         return jaccard_similarity(get_fingerprint(chiral_smi), get_fingerprint(target_smi))

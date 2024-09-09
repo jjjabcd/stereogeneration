@@ -364,7 +364,6 @@ class JANUS:
                 mut_smi_loc = self.check_filters(mut_smi_loc)
 
                 # filter out molecules already found
-                # mut_smi_loc = list(set(mut_smi_loc))
                 copy_collector = self.smiles_collector.copy()
                 for x in mut_smi_loc:
                     smi = assign_stereo(x, copy_collector) if self.stereo else x

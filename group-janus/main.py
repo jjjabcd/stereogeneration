@@ -20,15 +20,6 @@ from functools import partial
 from argparse import ArgumentParser
 
 
-def debug_fitness(smi):
-    # logP fitness for quick evaluation and debugging :)
-    m = Chem.MolFromSmiles(smi)
-    if m is None:
-        return -999.0
-    else:
-        score = Crippen.MolLogP(m)
-        return score
-
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument("--target", action="store", type=str, default="1OYT", help="Protein target, defaults 1OYT.")
@@ -75,17 +66,17 @@ if __name__ == '__main__':
     # all parameters to be set, below are defaults
     params_dict = {
         # Number of iterations that JANUS runs for
-        "generations": 100, # 50,
+        "generations": 50,
 
         # The number of molecules for which fitness calculations are done, 
         # exploration and exploitation each have their own population
         # so the effective total budget per iteration at most 2*generation_size
-        "generation_size": 50, # 100,
+        "generation_size": 100,
         
         # Number of molecules that are exchanged between the exploration and exploitation
         # this should be < 10% of generation size; this is the number of replaced species
         # if too high, too many molecules will be replaced
-        "num_exchanges": 3, # 5,
+        "num_exchanges": 5,
 
         # Callable filtering function (None defaults to no filtering)
         "custom_filter": passes_filter,

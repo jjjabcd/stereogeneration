@@ -7,6 +7,7 @@ from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnum
 from morfeus.conformer import ConformerEnsemble
 from pebble import concurrent
 from concurrent.futures import TimeoutError
+from .utils import assign_stereo
 
 import subprocess
 
@@ -23,6 +24,9 @@ def stda(smi):
     cwd = os.getcwd()
     tmp_dir = tempfile.TemporaryDirectory(dir='/tmp')
     os.chdir(tmp_dir.name)
+    
+    # assign stereo
+    smi = assign_stereo(smi, {})
 
     try:
         # random seed required, since stda algorithm is very sensitive to conformer

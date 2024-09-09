@@ -99,11 +99,6 @@ def assign_stereo(smi, collector={}, random_stereo=True):
     isomers = list(EnumerateStereoisomers(mol, options=opt))
     isomers = remove_specified_chiral_centres(isomers)      # remove nitrogen chiral centres
 
-    # other isomers 
-    opt = StereoEnumerationOptions(unique=True, onlyUnassigned=False)
-    other_isomers = list(EnumerateStereoisomers(mol, options=opt))
-    other_isomers = remove_specified_chiral_centres(other_isomers)      # remove nitrogen chiral centres
-
     # return isomer that is not yet observed
     if len(isomers) >= 1:
         if random_stereo: random.shuffle(isomers)     # random selecting
@@ -111,18 +106,23 @@ def assign_stereo(smi, collector={}, random_stereo=True):
             smi = Chem.MolToSmiles(i, isomericSmiles=True, canonical=True)
             if smi not in collector:
                 collector[smi] = []
-                return smi #, True
+                return smi
+            
+    # other isomers 
+    opt = StereoEnumerationOptions(unique=True, onlyUnassigned=False)
+    other_isomers = list(EnumerateStereoisomers(mol, options=opt))
+    other_isomers = remove_specified_chiral_centres(other_isomers)      # remove nitrogen chiral centres
         
-    if len(other_isomers) > 1:
+    if len(other_isomers) >= 1:
         if random_stereo: random.shuffle(other_isomers)
         for i in other_isomers:
             smi = Chem.MolToSmiles(i, isomericSmiles=True, canonical=True)
             if smi not in collector:
                 collector[smi] = []
-                return smi #, True
+                return smi
             
     # if none are found, return original smiles
-    return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True) #, False
+    return Chem.MolToSmiles(isomers[0], isomericSmiles=True, canonical=True)
 
 
 
