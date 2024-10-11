@@ -3,6 +3,7 @@
 Studying the effects of including stereisomeric information in generative models for molecules.
 
 Benchmarks:
+- Rediscovery benchmark
 - Docking score
 - CD Spectra
 
