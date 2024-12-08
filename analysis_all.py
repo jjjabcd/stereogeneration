@@ -1,5 +1,6 @@
 import os, sys
-sys.path.append('stereogeneration')
+ROOT_DIR = '../../_submission/'
+sys.path.append(f'{ROOT_DIR}/stereogeneration')
 
 import glob
 import pandas as pd
@@ -19,7 +20,7 @@ from scipy.stats import ttest_ind
 from sklearn.metrics import auc
 # import matplotlib as mpl
 
-# sns.set_context('talk', font_scale=2)
+sns.set_context('talk', font_scale=1)
 # mpl.rcParams['lines.linewidth'] = 5
 # mpl.rcParams['errorbar.capsize'] = 10
 
@@ -127,12 +128,13 @@ def load_reinvent_data(path='.'):
 def plot_best_mols(*df_pops, n_plot=5):
     images = []
     for i, df in enumerate(df_pops):
-        df_best = df.drop_duplicates('smiles').sort_values('fitness', ascending=False).groupby('run_type', as_index=False).head(n_plot)
+        df_best = df.sort_values('fitness', ascending=False).drop_duplicates('smiles', keep='first').groupby('run_type', as_index=False).head(n_plot)
         df_best['mols'] = df_best['smiles'].apply(Chem.MolFromSmiles)
         df_best['has_stereo'] = df_best['smiles'].apply(has_stereo)
         df_best = df_best.sort_values('run_type')
         labels = [
-            f'{r["run_type"]} {str(r["has_stereo"])}\n{str(r["fitness"])}'
+            # f'{r["run_type"]} {str(r["has_stereo"])}\n{str(r["fitness"])}'
+            f'{str(r["fitness"])}'
             for i, r in df_best.iterrows()
         ]
         img = Draw.MolsToGridImage(df_best['mols'].tolist(), molsPerRow=n_plot, subImgSize=(300,300), legends=labels)
@@ -150,19 +152,30 @@ def pop_to_auroc():
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument("--target", action="store", type=str, default="1SYH")
-    parser.add_argument("--label", action="store", type=str, default="1SYH docking score", help="Y aix labels, defaults 1SYH.")
+    parser.add_argument("--label", action="store", type=str, default=None, help="Y aix labels, defaults 1SYH.")
+    parser.add_argument("--horizontal", action="store", type=bool, default=True, help="Make plots horizontal")
     
     FLAGS = parser.parse_args()
 
-    df = pd.read_csv('zinc.csv')
+    df = pd.read_csv(f'{ROOT_DIR}/zinc.csv')
     best_in_dataset = df.nlargest(1, FLAGS.target)
-
+    
+    if FLAGS.label is None:
+        label_map = {
+            '1SYH': '1SYH docking score',
+            '1OYT': '1OYT docking score',
+            '6Y2F': '6Y2F docking score',
+            'cd': 'CD spectra score',
+            'fp-albuterol': '(R)-albuterol similarity',
+            'fp-mestranol': 'Mestranol similarity'
+        }
+        FLAGS.label = label_map[FLAGS.target]
 
     # load data
-    j_top1, j_explt, j_explr = load_janus_data()
-    gj_top1, gj_explt, gj_explr = load_janus_data(model='group-janus')
-    gjf_top1, gjf_explt, gjf_explr = load_janus_data(model='group-janus-fragments')
-    r_top1, r_pop = load_reinvent_data()
+    j_top1, j_explt, j_explr = load_janus_data(path=FLAGS.target)
+    gj_top1, gj_explt, gj_explr = load_janus_data(path=FLAGS.target, model='group-janus')
+    gjf_top1, gjf_explt, gjf_explr = load_janus_data(path=FLAGS.target, model='group-janus-fragments')
+    r_top1, r_pop = load_reinvent_data(path=FLAGS.target)
     
     # append the populations of janus runs
     j_pop = pd.concat([j_explt, j_explr]).sort_values(['run', 'run_type', 'evaluation'])
@@ -176,19 +189,25 @@ if __name__ == '__main__':
     ###### begin plotting #######
 
     ### Calculate AUROC print (perform t-test)
-    with open('final_analysis.out', 'w') as f:
+    with open(f'{FLAGS.target}/final_analysis.out', 'w') as f:
         f.write("#######\n")
-        for i, df in zip(['reinvent', 'janus', 'group-janus', 'group-janus-fragments'], [r_pop, j_pop, gj_pop, gjf_pop]):
-            df['evaluation'] /= max(df['evaluation'])
-            df['top1'] -= best_in_dataset[FLAGS.target].values[0]
+        # [r_pop, j_pop, gj_pop, gjf_pop]
+        for i, df in zip(['reinvent', 'janus', 'group-janus', 'group-janus-fragments'], [r_top1, j_top1, gj_top1, gjf_top1]):
+            # df['evaluation'] /= max(df['evaluation'])
+            df['evaluation'] = df['generation'] / max(df['generation'])
+            # df['top1'] /= best_in_dataset[FLAGS.target].values[0]
+            if 'fp' not in FLAGS.target:
+                df['top1'] = df['fitness'] / best_in_dataset[FLAGS.target].values[0]
+            else:
+                df['top1'] = df['fitness']
             auc_df = df.groupby(['run', 'run_type']).apply(lambda x: auc(x['evaluation'], x['top1'])).reset_index()
             auc_df = auc_df.rename(columns={0: 'auc'})
             s_df = auc_df[auc_df['run_type'] == 'stereo']
             ns_df = auc_df[auc_df['run_type'] == 'nonstereo']
             tstat, pval = ttest_ind(s_df['auc'].to_numpy(), ns_df['auc'].to_numpy())
             f.write(f"AUROC scores analysis {i}:\n")
-            f.write(f"stereo {i}: {s_df['auc'].mean()} +- {s_df['auc'].std()}\n")
-            f.write(f"nonstereo {i}: {ns_df['auc'].mean()} +- {ns_df['auc'].std()}\n")
+            f.write(f"stereo {i}: {s_df['auc'].mean():.3f} $\pm$ {s_df['auc'].std():.3f}\n")
+            f.write(f"nonstereo {i}: {ns_df['auc'].mean():.3f} $\pm$ {ns_df['auc'].std():.3f}\n")
             f.write(f'stereo/non-stereo t_test: {tstat:.3f}, pval: {pval:.3f}\n\n')
 
     # # plot the top1 per evaluation lineplot
@@ -221,12 +240,13 @@ if __name__ == '__main__':
 
 
     # plot the top1 lineplot
-    fig, axes = plt.subplots(4,1, sharex=True, figsize=(5, 13))
+    fig, axes = plt.subplots(4,1, sharex=True, figsize=(5, 13)) if not FLAGS.horizontal else plt.subplots(1,4, sharey=True, figsize=(20, 5)) 
     axes = axes.flatten()
-    with open('final_analysis.out', 'a') as f:
+    with open(f'{FLAGS.target}/final_analysis.out', 'a') as f:
         f.write("#######\n")
         for i, (name, df, ax) in enumerate(zip(['reinvent', 'janus', 'group-janus', 'group-janus-fragments'], [r_top1, j_top1, gj_top1, gjf_top1], axes)):
-            sns.lineplot(ax=ax, data=df, x='generation', y='fitness', hue='run_type', palette=CMAP, hue_order=RUN_TYPES)
+            g = sns.lineplot(ax=ax, data=df, x='generation', y='fitness', hue='run_type', palette=CMAP, hue_order=RUN_TYPES)
+            g.legend_.set_title(None)
             ax.hlines(best_in_dataset[FLAGS.target].values, min(df['generation']), max(df['generation']), color='k', linestyle='--')
             ax.set_xlim([min(df['generation']), max(df['generation'])])
             ax.set_xlabel('Generation')
@@ -241,21 +261,23 @@ if __name__ == '__main__':
             ns_df = max_df[max_df['run_type'] == 'nonstereo']
             tstat, pval = ttest_ind(s_df['fitness'].to_numpy(), ns_df['fitness'].to_numpy())
             f.write(f"Top1 scores analysis {name}:\n")
-            f.write(f"stereo {i}: {s_df['fitness'].mean()} +- {s_df['fitness'].std()}\n")
-            f.write(f"nonstereo {i}: {ns_df['fitness'].mean()} +- {ns_df['fitness'].std()}\n")
+            f.write(f"stereo {i}: {s_df['fitness'].mean():.3f} $\pm$ {s_df['fitness'].std():.3f}  \n")
+            f.write(f"nonstereo {i}: {ns_df['fitness'].mean():.3f} $\pm$ {ns_df['fitness'].std():.3f}  \n")
             f.write(f'stereo/non-stereo t_test: {tstat:.3f}, pval: {pval:.3f}\n\n')
 
-    fig.savefig('top1_traces.png', bbox_inches='tight')
+    fname = 'top1_traces.png' if not FLAGS.horizontal else 'top1_traces_horizontal.png'
+    fig.savefig(f'{FLAGS.target}/{fname}', bbox_inches='tight')
 
 
     # top10
-    fig, axes = plt.subplots(4,1, sharex=True, figsize=(5, 13))
+    fig, axes = plt.subplots(4,1, sharex=True, figsize=(5, 13)) if not FLAGS.horizontal else plt.subplots(1,4, sharey=True, figsize=(20, 5)) 
     axes = axes.flatten()
-    with open('final_analysis.out', 'a') as f:
+    with open(f'{FLAGS.target}/final_analysis.out', 'a') as f:
         f.write("#######\n")
         for i, (name, df, ax) in enumerate(zip(['reinvent', 'janus', 'group-janus', 'group-janus-fragments'], [r_pop, j_pop, gj_pop, gjf_pop], axes)):
             df = df.groupby(['run_type', 'generation', 'run']).apply(lambda x: x.nlargest(10, ['fitness']).mean())
-            sns.lineplot(ax=ax, data=df, x='generation', y='fitness', hue='run_type', palette=CMAP, hue_order=RUN_TYPES)
+            g = sns.lineplot(ax=ax, data=df, x='generation', y='fitness', hue='run_type', palette=CMAP, hue_order=RUN_TYPES)
+            g.legend_.set_title(None)
             ax.hlines(best_in_dataset[FLAGS.target].values, min(df['generation']), max(df['generation']), color='k', linestyle='--')
             ax.set_xlim([min(df['generation']), max(df['generation'])])
             ax.set_xlabel('Generation')
@@ -271,18 +293,18 @@ if __name__ == '__main__':
             ns_df = stat_df[stat_df['run_type'] == 'nonstereo']
             tstat, pval = ttest_ind(s_df['fitness'].to_numpy(), ns_df['fitness'].to_numpy())
             f.write(f"Top10 scores analysis {name}:\n")
-            f.write(f"stereo {i}: {s_df['fitness'].mean()} +- {s_df['fitness'].std()}\n")
-            f.write(f"nonstereo {i}: {ns_df['fitness'].mean()} +- {ns_df['fitness'].std()}\n")
+            f.write(f"stereo {i}: {s_df['fitness'].mean():.3f} $\pm$ {s_df['fitness'].std():.3f}  \n")
+            f.write(f"nonstereo {i}: {ns_df['fitness'].mean():.3f} $\pm$ {ns_df['fitness'].std():.3f}  \n")
             f.write(f'stereo/non-stereo t_test: {tstat:.3f}, pval: {pval:.3f}\n\n')
-
-    fig.savefig('top10_traces.png', bbox_inches='tight')
+    fname = 'top10_traces.png' if not FLAGS.horizontal else 'top10_traces_horizontal.png'
+    fig.savefig(f'{FLAGS.target}/{fname}', bbox_inches='tight')
 
 
     ### Plot the top 5 molecules
     r_img, j_img, gj_img, gjf_img = plot_best_mols(r_pop, j_pop, gj_pop, gjf_pop)
-    r_img.save('mols_reinvent.png')
-    j_img.save('mols_janus_mols.png')
-    gj_img.save('mols_group-janus.png')
-    gjf_img.save('mols_group-janus-fragments.png')
+    r_img.save(f'{FLAGS.target}/mols_reinvent.png')
+    j_img.save(f'{FLAGS.target}/mols_janus_mols.png')
+    gj_img.save(f'{FLAGS.target}/mols_group-janus.png')
+    gjf_img.save(f'{FLAGS.target}/mols_group-janus-fragments.png')
 
 
