@@ -1,6 +1,4 @@
 import os, sys
-ROOT_DIR = '../../_submission/'
-sys.path.append(f'{ROOT_DIR}/stereogeneration')
 
 import glob
 import pandas as pd
@@ -154,8 +152,12 @@ if __name__ == '__main__':
     parser.add_argument("--target", action="store", type=str, default="1SYH")
     parser.add_argument("--label", action="store", type=str, default=None, help="Y aix labels, defaults 1SYH.")
     parser.add_argument("--horizontal", action="store", type=bool, default=True, help="Make plots horizontal")
+    parser.add_argument("--root_dir", action="store", type=str, default='.', help="Path of zinc.csv file, and `stereogeneration` import.")
     
     FLAGS = parser.parse_args()
+
+    ROOT_DIR = FLAGS.root_dir
+    sys.path.append(f'{ROOT_DIR}/stereogeneration')
 
     df = pd.read_csv(f'{ROOT_DIR}/zinc.csv')
     best_in_dataset = df.nlargest(1, FLAGS.target)
@@ -209,34 +211,6 @@ if __name__ == '__main__':
             f.write(f"stereo {i}: {s_df['auc'].mean():.3f} $\pm$ {s_df['auc'].std():.3f}\n")
             f.write(f"nonstereo {i}: {ns_df['auc'].mean():.3f} $\pm$ {ns_df['auc'].std():.3f}\n")
             f.write(f'stereo/non-stereo t_test: {tstat:.3f}, pval: {pval:.3f}\n\n')
-
-    # # plot the top1 per evaluation lineplot
-    # fig, axes = plt.subplots(4,1, sharex=True, figsize=(5, 13))
-    # axes = axes.flatten()
-    # for i, (df, ax) in enumerate(zip([r_pop, j_pop, gj_pop, gjf_pop], axes)):
-    #     grouped = df.groupby(['evaluation', 'run_type'])
-
-    #     # custom confidnece interval (seaborn is too slow)
-    #     results = []
-    #     for (eval, run_type), group in tqdm(grouped):
-    #         mean = group['top1'].mean()
-    #         ci_low, ci_high = bootstrap_ci(group['top1'])
-    #         results.append({'evaluations': eval, 'run_type': run_type, 'mean': mean, 'ci_low': ci_low, 'ci_high': ci_high})
-    #     results_df = pd.DataFrame(results)
-
-    #     for run_type in RUN_TYPES:
-    #         data = results_df[results_df['run_type'] == run_type]
-    #         ax.plot(data['evaluations'], data['mean'], label=run_type, c=CMAP[run_type])
-    #         ax.fill_between(data['evaluations'], data['ci_low'], data['ci_high'], alpha=0.3, color=CMAP[run_type])
-        
-    #     # ax.hlines(best_in_dataset[FLAGS.target].values, min(df['evaluation']), max(df['evaluation']), color='k', linestyle='--')
-    #     ax.set_xlim([min(df['evaluation']), max(df['evaluation'])])
-    #     ax.set_xlabel('Evaluation')
-    #     ax.set_ylabel(f'{FLAGS.label}')
-    #     if i == 0:
-    #         ax.legend()
-    # fig.savefig('top1_traces_eval.png', bbox_inches='tight')
-
 
 
     # plot the top1 lineplot
